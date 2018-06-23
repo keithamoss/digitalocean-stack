@@ -1,0 +1,34 @@
+version: "2"
+services:
+  # frontend:
+  #   image: node:10.5.0-alpine
+  #   volumes:
+  #     - ./frontend:/app:delegated
+  #   entrypoint: /app/docker-entrypoint.sh
+  #   ports:
+  #     - "3000:3000"
+  scremsong:
+    build: ./scremsong/django/
+    command: runserver
+    volumes:
+      - ./scremsong/django/:/app:delegated
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=scremsong
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+    env_file:
+      - web-variables.env
+  nginx:
+    build: nginx/
+    volumes:
+      - ./nginx:/app
+      - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
+      - ./scremsong/frontend/build/:/scremsong:delegated
+    depends_on:
+      - scremsong
+    ports:
+      - "443:443"
