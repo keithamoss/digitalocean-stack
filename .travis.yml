@@ -12,4 +12,4 @@ before_install:
 script:
 - pwd
 - ls -l
-- tail ./scremsong-web-variables.env --lines=50
+# - tail ./scremsong-web-variables.env --lines=50
