@@ -1,14 +1,8 @@
 version: "2"
 services:
-  # frontend:
-  #   image: node:10.5.0-alpine
-  #   volumes:
-  #     - ./frontend:/app:delegated
-  #   entrypoint: /app/docker-entrypoint.sh
-  #   ports:
-  #     - "3000:3000"
   scremsong:
-    build: ./scremsong/django/
+    # build: ./scremsong/django/
+    image: keithmoss/scremsong-django:1
     command: runserver
     volumes:
       - ./scremsong/django/:/app:delegated
@@ -21,10 +15,11 @@ services:
       - DB_USERNAME=postgres
       - DB_PASSWORD=postgres
     env_file:
-      - web-variables.env
+      - scremsong-web-variables.env
   nginx:
     build: nginx/
     volumes:
+      - ./logs/nginx:/var/log/nginx
       - ./nginx:/app
       - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
       - ./scremsong/frontend/build/:/scremsong:delegated
