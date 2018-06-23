@@ -2,14 +2,8 @@ language: python
 python:
 - 3.6
 before_install:
-# - openssl aes-256-cbc -K $encrypted_14f4390ac2b6_key -iv $encrypted_14f4390ac2b6_iv
-#   -in deploy_key.enc -out ./deploy_key -d
 - openssl aes-256-cbc -K $encrypted_14f4390ac2b6_key -iv $encrypted_14f4390ac2b6_iv
   -in scremsong-web-variables.env.enc -out ./scremsong-web-variables.env -d
-# - eval "$(ssh-agent -s)"
-# - chmod 600 ./deploy_key
-# - ssh-add ./deploy_key
 script:
 - pwd
 - ls -l
-# - tail ./scremsong-web-variables.env --lines=50
