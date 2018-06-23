@@ -1,0 +1,17 @@
+version: "2"
+services:
+  db:
+    image: mdillon/postgis:10-alpine
+    command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
+    ports:
+      - "5432:5432"
+    env_file:
+      - db-env-variables.env
+    # environment:
+      # - POSTGRES_DB=stack-a
+    volumes:
+      # Enable this mapping to inject the tweaked postgresql.conf file into our PostgreSQL container.
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+
+      # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
+      # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
