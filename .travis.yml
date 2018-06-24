@@ -11,3 +11,6 @@ before_install:
 script:
 - pwd
 - ls -l
+- echo $AWS_REGION
+- source ./secrets/travis.env
+- echo $AWS_REGION
