@@ -8,7 +8,8 @@ services:
     env_file:
       - secrets/db.env
     volumes:
-      - ./logs/postgresql:/var/lib/postgresql/data/pg_log
+      - ./postgres-data:/var/lib/postgresql/data
+      - ./logs/postgresql:/etc/postgresql/pg_log
 
       # Enable this mapping to inject the tweaked postgresql.conf file into our PostgreSQL container.
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
