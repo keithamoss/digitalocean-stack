@@ -6,12 +6,18 @@ services:
     ports:
       - "5432:5432"
     env_file:
-      - db-env-variables.env
-    # environment:
-      # - POSTGRES_DB=stack-a
+      - secrets/db.env
     volumes:
+      - ./logs/postgresql:/var/lib/postgresql/data/pg_log
+
       # Enable this mapping to inject the tweaked postgresql.conf file into our PostgreSQL container.
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
 
       # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
       # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
+  pgbackups3:
+    image: schickling/postgres-backup-s3
+    env_file:
+      - secrets/pgbackups3.env
+    depends_on:
+      - db

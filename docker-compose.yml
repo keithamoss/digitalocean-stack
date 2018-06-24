@@ -8,14 +8,13 @@ services:
       - ./scremsong/django/:/app:delegated
     ports:
       - "8000:8000"
-    environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=scremsong
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
     env_file:
-      - scremsong-web-variables.env
+      - secrets/scremsong-web.env
+      - secrets/scremsong-db.env
+  pgbackups3:
+    image: schickling/postgres-backup-s3
+    env_file:
+      - secrets/pgbackups3.env
   nginx:
     build: nginx/
     volumes:
