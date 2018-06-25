@@ -71,6 +71,10 @@ class Deploy:
                 cloudConfig = cloudConfig.replace("{SCREMSONG_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
             with open("secrets/pgbackups3.env") as f:
                 cloudConfig = cloudConfig.replace("{PGBACKUPS3_ENV}", f.read().replace("\n", "\n      "))
+            with open("secrets/demsausage-public-frontend.env") as f:
+                cloudConfig = cloudConfig.replace("{DEMSAUSAGE_PUBLIC_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
+            with open("secrets/demsausage-admin-frontend.env") as f:
+                cloudConfig = cloudConfig.replace("{DEMSAUSAGE_ADMIN_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
         return cloudConfig
 
     def getRunningDroplet(self):

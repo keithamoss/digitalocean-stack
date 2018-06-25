@@ -11,5 +11,5 @@ before_install:
 script:
 - source ./secrets/travis.env
 - python src/deploy.py
-# after_script:
-#   - if [ "$TRAVIS_BRANCH" == "master" ]; then curl --verbose -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" -H "X-Auth-Email:$CF_EMAIL" -H "X-Auth-Key:$CF_API_KEY" -H "Content-Type:application/json" --data '{"purge_everything":true}'; fi
+after_script:
+  - if [ "$TRAVIS_BRANCH" == "master" ]; then curl --verbose -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" -H "X-Auth-Email:$CF_EMAIL" -H "X-Auth-Key:$CF_API_KEY" -H "Content-Type:application/json" --data '{"purge_everything":true}'; fi

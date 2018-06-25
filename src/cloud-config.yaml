@@ -12,6 +12,12 @@ write_files:
   - path: /var/tmp/secrets/pgbackups3.env
     content: |
       {PGBACKUPS3_ENV}
+  - path: /var/tmp/secrets/demsausage-public-frontend.env
+    content: |
+      {DEMSAUSAGE_PUBLIC_FRONTEND_ENV}
+  - path: /var/tmp/secrets/demsausage-admin-frontend.env
+    content: |
+      {DEMSAUSAGE_ADMIN_FRONTEND_ENV}
 runcmd:
   # Now contained in our DigitalOcean snapshot
   # - sed -i '/^PermitRootLogin/s/yes/without-password/' /etc/ssh/sshd_config
@@ -32,11 +38,23 @@ runcmd:
   - npm install .
   - npm run build
   - cd /apps
+  # Checkout and create a production build of Democracy Sausage
+  - git clone https://github.com/keithamoss/demsausage-v3
+  - cd demsausage-v3/public/
+  - mv /var/tmp/secrets/demsausage-public-frontend.env ./.env
+  - npm install .
+  - npm run build
+  - cd ../demsausage-v3/admin/
+  - mv /var/tmp/secrets/demsausage-admin-frontend.env ./.env
+  - npm install .
+  - npm run build
+  - cd /apps
   # Grab our DigitalOcean stack
   - git clone https://github.com/keithamoss/digitalocean-stack.git
   - cd digitalocean-stack
   - mkdir -p logs/nginx/ && mkdir logs/django/
   - ln -s /apps/scremsong /apps/digitalocean-stack/scremsong
+  - ln -s /apps/demsausage-v3 /apps/digitalocean-stack/demsausage-v3
   # Setup Nginx with SSL certs from CloudFlare
   - cd nginx
   - export CF_API_KEY={CF_ORIGIN_CA_KEY}
