@@ -9,10 +9,7 @@ before_install:
 - chmod 600 ./secrets/deploy_key
 - ssh-add ./secrets/deploy_key
 script:
-- pwd
-- ls -l
-- echo $AWS_REGION
 - source ./secrets/travis.env
-- echo $AWS_REGION
+- python src/deploy.py
 # after_script:
 #   - if [ "$TRAVIS_BRANCH" == "master" ]; then curl --verbose -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" -H "X-Auth-Email:$CF_EMAIL" -H "X-Auth-Key:$CF_API_KEY" -H "Content-Type:application/json" --data '{"purge_everything":true}'; fi

@@ -1,0 +1,48 @@
+#cloud-config
+write_files:
+  - path: /var/tmp/secrets/scremsong-web.env
+    content: |
+      {SCREMSONG_WEB_ENV}
+  - path: /var/tmp/secrets/scremsong-db.env
+    content: |
+      {SCREMSONG_DB_ENV}
+  - path: /var/tmp/secrets/scremsong-frontend.env
+    content: |
+      {SCREMSONG_FRONTEND_ENV}
+  - path: /var/tmp/secrets/pgbackups3.env
+    content: |
+      {PGBACKUPS3_ENV}
+runcmd:
+  # Now contained in our DigitalOcean snapshot
+  # - sed -i '/^PermitRootLogin/s/yes/without-password/' /etc/ssh/sshd_config
+  # # Install dependencies
+  # - curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+  # - echo 'deb http://pkg.cloudflare.com/ xenial main' | sudo tee /etc/apt/sources.list.d/cloudflare-main.list
+  # - curl -C - https://pkg.cloudflare.com/pubkey.gpg | sudo apt-key add - 
+  # # - curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+  # # - echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+  # - apt-get update
+  # - apt-get install --assume-yes nodejs=8.11.3-1nodesource1 cfca
+  # - apt-get install --assume-yes yarn=1.7.0
+  - mkdir /apps && cd /apps
+  # Checkout and create a production build of Scremsong
+  - git clone https://github.com/keithamoss/scremsong.git
+  - cd scremsong/frontend/
+  - mv /var/tmp/secrets/scremsong-frontend.env ./.env
+  - npm install .
+  - npm run build
+  - cd /apps
+  # Grab our DigitalOcean stack
+  - git clone https://github.com/keithamoss/digitalocean-stack.git
+  - cd digitalocean-stack
+  - mkdir -p logs/nginx/ && mkdir logs/django/
+  - ln -s /apps/scremsong /apps/digitalocean-stack/scremsong
+  # Setup Nginx with SSL certs from CloudFlare
+  - cd nginx
+  - export CF_API_KEY={CF_ORIGIN_CA_KEY}
+  - cfca getcert -hostnames democracysausage.org,*.democracysausage.org
+  # Docker up!
+  - cd /apps/digitalocean-stack
+  - mkdir secrets
+  - mv /var/tmp/secrets/*.env /apps/digitalocean-stack/secrets/
+  - docker-compose up
