@@ -39,16 +39,16 @@ runcmd:
   - npm run build
   - cd /apps
   # Checkout and create a production build of Democracy Sausage
-  - git clone https://github.com/keithamoss/demsausage-v3
-  - cd demsausage-v3/public/
-  - mv /var/tmp/secrets/demsausage-public-frontend.env ./.env
-  - npm install .
-  - npm run build
-  - cd ../demsausage-v3/admin/
-  - mv /var/tmp/secrets/demsausage-admin-frontend.env ./.env
-  - npm install .
-  - npm run build
-  - cd /apps
+  # - git clone https://github.com/keithamoss/demsausage-v3
+  # - cd demsausage-v3/public/
+  # - mv /var/tmp/secrets/demsausage-public-frontend.env ./.env
+  # - npm install .
+  # - npm run build
+  # - cd ../admin/
+  # - mv /var/tmp/secrets/demsausage-admin-frontend.env ./.env
+  # - npm install .
+  # - npm run build
+  # - cd /apps
   # Grab our DigitalOcean stack
   - git clone https://github.com/keithamoss/digitalocean-stack.git
   - cd digitalocean-stack
