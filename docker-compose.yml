@@ -2,7 +2,7 @@ version: "2"
 services:
   scremsong:
     image: keithmoss/scremsong-django:2
-    command: /usr/bin/supervisord -c /etc/supervisord.conf
+    command: /usr/bin/supervisord -c /app/supervisord.conf
     volumes:
       - ./scremsong/django/:/app:delegated
       - ./logs/django:/app/logs:delegated
