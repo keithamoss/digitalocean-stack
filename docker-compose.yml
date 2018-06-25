@@ -1,11 +1,11 @@
 version: "2"
 services:
   scremsong:
-    # build: ./scremsong/django/
-    image: keithmoss/scremsong-django:1
-    command: runserver
+    image: keithmoss/scremsong-django:2
+    command: /usr/bin/supervisord -c /etc/supervisord.conf
     volumes:
       - ./scremsong/django/:/app:delegated
+      - ./logs/django:/app/logs:delegated
     ports:
       - "8000:8000"
     env_file:
@@ -21,7 +21,8 @@ services:
       - ./logs/nginx:/var/log/nginx
       - ./nginx:/app
       - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
-      - ./scremsong/frontend/build/:/scremsong:delegated
+      - ./scremsong/frontend/build/:/scremsong/frontend/build:delegated
+      - ./scremsong/django/static:/django/static:delegated
     depends_on:
       - scremsong
     ports:
