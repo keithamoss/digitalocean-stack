@@ -1,23 +1,17 @@
 #cloud-config
 write_files:
+  - path: /var/tmp/secrets/droplet-deploy.env
+    content: |
+      {DROPLET_DEPLOY_ENV}
   - path: /var/tmp/secrets/scremsong-web.env
     content: |
       {SCREMSONG_WEB_ENV}
   - path: /var/tmp/secrets/scremsong-db.env
     content: |
       {SCREMSONG_DB_ENV}
-  - path: /var/tmp/secrets/scremsong-frontend.env
-    content: |
-      {SCREMSONG_FRONTEND_ENV}
   - path: /var/tmp/secrets/pgbackups3.env
     content: |
       {PGBACKUPS3_ENV}
-  - path: /var/tmp/secrets/demsausage-public-frontend.env
-    content: |
-      {DEMSAUSAGE_PUBLIC_FRONTEND_ENV}
-  - path: /var/tmp/secrets/demsausage-admin-frontend.env
-    content: |
-      {DEMSAUSAGE_ADMIN_FRONTEND_ENV}
 runcmd:
   # Now contained in our DigitalOcean snapshot
   # - sed -i '/^PermitRootLogin/s/yes/without-password/' /etc/ssh/sshd_config
@@ -30,25 +24,29 @@ runcmd:
   # - apt-get update
   # - apt-get install --assume-yes nodejs=8.11.3-1nodesource1 cfca
   # - apt-get install --assume-yes yarn=1.7.0
+  # Set the environmnet variables for use in this terminal session
+  # https://superuser.com/a/1240860
+  - for env in $( cat /var/tmp/secrets/droplet-deploy.env ); do export $(echo $env | sed -e 's/"//g'); done
   - mkdir /apps && cd /apps
-  # Checkout and create a production build of Scremsong
+  # Install and configure the AWS CLI
+  - curl -O https://bootstrap.pypa.io/get-pip.py
+  - python3 get-pip.py
+  - pip install awscli
+  # Checkout our source, and grab our production builds, of Scremsong
   - git clone https://github.com/keithamoss/scremsong.git
   - cd scremsong/frontend/
-  - mv /var/tmp/secrets/scremsong-frontend.env ./.env
-  - npm install .
-  - npm run build
+  - aws s3 cp s3://digitalocean-stack/builds/scremsong-frontend.tar build.tar
+  - tar xvf build.tar
   - cd /apps
-  # Checkout and create a production build of Democracy Sausage
-  # - git clone https://github.com/keithamoss/demsausage-v3
-  # - cd demsausage-v3/public/
-  # - mv /var/tmp/secrets/demsausage-public-frontend.env ./.env
-  # - npm install .
-  # - npm run build
-  # - cd ../admin/
-  # - mv /var/tmp/secrets/demsausage-admin-frontend.env ./.env
-  # - npm install .
-  # - npm run build
-  # - cd /apps
+  # Checkout our source, and grab our production builds, of Democracy Sausage
+  - git clone https://github.com/keithamoss/demsausage-v3
+  - cd demsausage-v3/public/
+  - aws s3 cp s3://digitalocean-stack/builds/demsausage-public.tar build.tar
+  - tar xvf build.tar
+  - cd ../admin/
+  - aws s3 cp s3://digitalocean-stack/builds/demsausage-admin.tar build.tar
+  - tar xvf build.tar
+  - cd /apps
   # Grab our DigitalOcean stack
   - git clone https://github.com/keithamoss/digitalocean-stack.git
   - cd digitalocean-stack
@@ -57,7 +55,6 @@ runcmd:
   - ln -s /apps/demsausage-v3 /apps/digitalocean-stack/demsausage-v3
   # Setup Nginx with SSL certs from CloudFlare
   - cd nginx
-  - export CF_API_KEY={CF_ORIGIN_CA_KEY}
   - cfca getcert -hostnames democracysausage.org,*.democracysausage.org
   # Docker up!
   - cd /apps/digitalocean-stack

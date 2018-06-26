@@ -11,9 +11,8 @@ logger = myLog()
 
 
 class Deploy:
-    def __init__(self, digitalocean_token, cf_origin_ca_key, snapshot_name, floating_ip):
+    def __init__(self, digitalocean_token, snapshot_name, floating_ip):
         self.digitalocean_token = digitalocean_token
-        self.cf_origin_ca_key = cf_origin_ca_key
         self.snapshot_name = snapshot_name
         self.floating_ip = floating_ip
         self.manager = digitalocean.Manager(token=self.digitalocean_token)
@@ -62,19 +61,14 @@ class Deploy:
     def __buildCloudConfig(self):
         with open("src/cloud-config.yaml") as f:
             cloudConfig = f.read()
-            cloudConfig = cloudConfig.replace("{CF_ORIGIN_CA_KEY}", self.cf_origin_ca_key)
+            with open("secrets/droplet-deploy.env") as f:
+                cloudConfig = cloudConfig.replace("{DROPLET_DEPLOY_ENV}", f.read().replace("\n", "\n      "))
             with open("secrets/scremsong-web.env") as f:
                 cloudConfig = cloudConfig.replace("{SCREMSONG_WEB_ENV}", f.read().replace("\n", "\n      "))
             with open("secrets/scremsong-db.env") as f:
                 cloudConfig = cloudConfig.replace("{SCREMSONG_DB_ENV}", f.read().replace("\n", "\n      "))
-            with open("secrets/scremsong-frontend.env") as f:
-                cloudConfig = cloudConfig.replace("{SCREMSONG_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
             with open("secrets/pgbackups3.env") as f:
                 cloudConfig = cloudConfig.replace("{PGBACKUPS3_ENV}", f.read().replace("\n", "\n      "))
-            with open("secrets/demsausage-public-frontend.env") as f:
-                cloudConfig = cloudConfig.replace("{DEMSAUSAGE_PUBLIC_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
-            with open("secrets/demsausage-admin-frontend.env") as f:
-                cloudConfig = cloudConfig.replace("{DEMSAUSAGE_ADMIN_FRONTEND_ENV}", f.read().replace("\n", "\n      "))
         return cloudConfig
 
     def getRunningDroplet(self):
@@ -101,6 +95,7 @@ class Deploy:
                                        private_networking=True,
                                        user_data=self.__buildCloudConfig(),
                                        monitoring=True)
+        # digitalocean.baseapi.DataReadError: error processing droplet creation, please try again
         droplet.create()
         logger.info("Droplet {name} created successfully.".format(name=name))
         return droplet
