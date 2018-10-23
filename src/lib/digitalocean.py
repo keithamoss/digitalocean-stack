@@ -40,6 +40,8 @@ class Deploy:
 
     def ___createDropletName(self):
         r = requests.get("https://api.github.com/repos/keithamoss/digitalocean-stack/git/refs/heads/master")
+        print("status_code", r.status_code)
+        print("body", r.text)
         return "stack-a-{hash}".format(hash=r.json()["object"]["sha"][:7])
 
     def __waitForDropletActionToComplete(self, droplet):
