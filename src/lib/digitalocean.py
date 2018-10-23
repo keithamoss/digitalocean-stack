@@ -11,10 +11,11 @@ logger = myLog()
 
 
 class Deploy:
-    def __init__(self, digitalocean_token, snapshot_name, floating_ip):
+    def __init__(self, digitalocean_token, github_personal_access_token, snapshot_name, floating_ip):
         self.digitalocean_token = digitalocean_token
         self.snapshot_name = snapshot_name
         self.floating_ip = floating_ip
+        self.github_personal_access_token = github_personal_access_token
         self.manager = digitalocean.Manager(token=self.digitalocean_token)
 
         # 1. Determine if an existing Droplet is running.
@@ -39,7 +40,9 @@ class Deploy:
             self.shutdownOldDroplet(self.old_droplet)
 
     def ___createDropletName(self):
-        r = requests.get("https://api.github.com/repos/keithamoss/digitalocean-stack/git/refs/heads/master")
+        r = requests.get("https://api.github.com/repos/keithamoss/digitalocean-stack/git/refs/heads/master", headers={
+            "Authorization": "token {token}".format(token=self.github_personal_access_token)
+        })
         print("status_code", r.status_code)
         print("body", r.text)
         return "stack-a-{hash}".format(hash=r.json()["object"]["sha"][:7])
