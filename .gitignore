@@ -1,4 +1,15 @@
 deploy_key
 deploy_key.pub
-web-variables.env
+*-web-variables.env
+db-env-variables.env
+secrets.tar
 nginx/wildcard.democracysausage.org.*
+travis-secrets.txt
+secrets/
+db/postges-data/
+db/logs/
+db/notes.md
+db/secrets/
+logs/
+stack-a-*.zip
+src/**/*.pyc
