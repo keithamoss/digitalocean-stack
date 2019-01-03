@@ -1,31 +1,31 @@
-version: "2"
+version: "3.7"
 services:
-  scremsong:
-    image: keithmoss/scremsong-django:2
-    command: /usr/bin/supervisord -c /app/supervisord.conf
-    volumes:
-      - ./scremsong/django/:/app:delegated
-      - ./logs/django:/app/logs:delegated
-    ports:
-      - "8000:8000"
-    env_file:
-      - secrets/scremsong-web.env
-      - secrets/scremsong-db.env
-  # pgbackups3:
-  #   image: schickling/postgres-backup-s3
-  #   env_file:
-  #     - secrets/pgbackups3.env
-  nginx:
-    build: nginx/
-    volumes:
-      - ./logs/nginx:/var/log/nginx
-      - ./nginx:/app
-      - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
-      - ./scremsong/frontend/build/:/scremsong/frontend/build:delegated
-      - ./demsausage-v3/public/build/:/demsausage-v3/public/build:delegated
-      - ./demsausage-v3/admin/build/:/demsausage-v3/admin/build:delegated
-      - ./scremsong/django/static:/django/static:delegated
-    depends_on:
-      - scremsong
-    ports:
-      - "443:443"
+    scremsong:
+        image: keithmoss/scremsong-django:2
+        command: /usr/bin/supervisord -c /app/supervisord.conf
+        volumes:
+            - ./scremsong/django/:/app:delegated
+            - ./logs/django:/app/logs:delegated
+        ports:
+            - "8000:8000"
+        env_file:
+            - secrets/scremsong-web.env
+            - secrets/scremsong-db.env
+    # pgbackups3:
+    #   image: schickling/postgres-backup-s3
+    #   env_file:
+    #     - secrets/pgbackups3.env
+    nginx:
+        build: nginx/
+        volumes:
+            - ./logs/nginx:/var/log/nginx
+            - ./nginx:/app
+            - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
+            - ./scremsong/frontend/build/:/scremsong/frontend/build:delegated
+            - ./demsausage-v3/public/build/:/demsausage-v3/public/build:delegated
+            - ./demsausage-v3/admin/build/:/demsausage-v3/admin/build:delegated
+            - ./scremsong/django/static:/django/static:delegated
+        depends_on:
+            - scremsong
+        ports:
+            - "443:443"
