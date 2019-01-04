@@ -14,5 +14,5 @@ CMD ["nginx", "-g", "daemon off;"]
 
 # ADD automatically uncompresses the tgz files for us
 ADD build/scremsong/*.tgz /frontend/scremsong/
-# ADD build/demsausage/*.tgz /frontend/demsausage/
-# ADD build/demsausage-admin/*.tgz /frontend/demsausage-admin/
+ADD build/demsausage/*.tgz /frontend/demsausage/
+ADD build/demsausage-admin/*.tgz /frontend/demsausage-admin/
