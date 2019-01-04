@@ -13,3 +13,4 @@ db/secrets/
 logs/
 stack-a-*.zip
 src/**/*.pyc
+src/cloud-config-db-actual.yaml

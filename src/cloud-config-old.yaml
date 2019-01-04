@@ -1,0 +1,15 @@
+#cloud-config
+runcmd:
+  - sed -i '/^PermitRootLogin/s/yes/without-password/' /etc/ssh/sshd_config
+  - git clone https://github.com/keithamoss/scremsong.git
+  - cd scremsong/
+  - mkdir logs
+  - cd app/
+  - echo 'deb http://pkg.cloudflare.com/ xenial main' | sudo tee /etc/apt/sources.list.d/cloudflare-main.list 
+  - curl -C - https://pkg.cloudflare.com/pubkey.gpg | sudo apt-key add - 
+  - apt-get update
+  - apt-get install --assume-yes cfca
+  - export CF_API_KEY={CF_API_KEY}
+  - cfca getcert -hostnames democracysausage.org,*.democracysausage.org
+  - cd ../
+  - docker-compose -f docker-compose-prod.yml up
