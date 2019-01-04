@@ -14,3 +14,5 @@ logs/
 stack-a-*.zip
 src/**/*.pyc
 src/cloud-config-db-actual.yaml
+keys/
+nginx/build/
