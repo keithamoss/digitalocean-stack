@@ -15,7 +15,7 @@ services:
         volumes:
             - ./keys/:/app/keys/:delegated
             - ./logs/nginx:/var/log/nginx:delegated
-            - ./nginx/nginx/docker.dev.conf:/etc/nginx/conf.d/nginx.conf
+            - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
             # - ./nginx:/app
             # - ./nginx/nginx/docker.prod.conf:/etc/nginx/conf.d/nginx.conf
             # - ./scremsong/frontend/build/:/scremsong/frontend/build:delegated
