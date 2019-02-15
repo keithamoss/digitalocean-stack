@@ -4,12 +4,26 @@ services:
         image: keithmoss/scremsong-django:latest
         command: supervisord
         volumes:
-            - ./logs/django:/app/logs:delegated
+            - ./logs/scremsong-django:/app/logs:delegated
         # ports:
         #     - "8000:8000"
         env_file:
             - secrets/scremsong-web.env
             - secrets/scremsong-db.env
+    demsausage:
+        image: keithmoss/demsausage-django:latest
+        command: supervisord
+        volumes:
+            - ./logs/demsausage-django:/app/logs:delegated
+        # ports:
+        #     - "8000:8000"
+        env_file:
+            - secrets/demsausage-web.env
+            - secrets/demsausage-db.env
+    memcached:
+        image: memcached
+        expose:
+            - "11211"
     nginx:
         image: keithmoss/sausage-nginx:latest
         volumes:
@@ -24,5 +38,7 @@ services:
             # - ./scremsong/django/static:/django/static:delegated
         depends_on:
             - scremsong
+            - demsausage
+            - memcached
         ports:
             - "443:443"
