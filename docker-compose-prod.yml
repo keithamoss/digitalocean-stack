@@ -18,8 +18,8 @@ services:
         # ports:
         #     - "8000:8000"
         env_file:
-            - secrets/demsausage-web.env
-            - secrets/demsausage-db.env
+            - secrets/sausage-web.env
+            - secrets/sausage-db.env
     memcached:
         image: memcached
         expose:
