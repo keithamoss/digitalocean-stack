@@ -16,3 +16,4 @@ CMD ["nginx", "-g", "daemon off;"]
 ADD build/scremsong/*.tgz /frontend/scremsong/
 ADD build/demsausage/*.tgz /frontend/demsausage/
 ADD build/demsausage-admin/*.tgz /frontend/demsausage-admin/
+ADD build/demsausage-api/*.tgz /frontend/demsausage-api/
