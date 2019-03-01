@@ -39,8 +39,8 @@ runcmd:
     - tar xvf build.tar
     - cd /apps
     # Checkout our source, and grab our production builds, of Democracy Sausage
-    - git clone https://github.com/keithamoss/demsausage-v3
-    - cd demsausage-v3/public/
+    - git clone https://github.com/keithamoss/demsausage
+    - cd demsausage/public/
     - aws s3 cp s3://digitalocean-stack/builds/demsausage-public.tar build.tar
     - tar xvf build.tar
     - cd ../admin/
@@ -52,7 +52,7 @@ runcmd:
     - cd digitalocean-stack
     - mkdir -p logs/nginx/ && mkdir logs/django/
     - ln -s /apps/scremsong /apps/digitalocean-stack/scremsong
-    - ln -s /apps/demsausage-v3 /apps/digitalocean-stack/demsausage-v3
+    - ln -s /apps/demsausage /apps/digitalocean-stack/demsausage
     # Setup Nginx with SSL certs from CloudFlare
     - cd nginx
     - cfca getcert -hostnames democracysausage.org,*.democracysausage.org,scremsong.democracysausage.org,scremsong-api.democracysausage.org

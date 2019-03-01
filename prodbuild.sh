@@ -15,9 +15,9 @@ mkdir -p nginx/build/demsausage-api
 # assumes local sources exist for DemocracySausage and Scremsong
 # this is horrible, fixme
 cp ../scremsong/build/frontend-"$SCREMSONG_VERSION".tgz ../scremsong/build/django-"$SCREMSONG_VERSION".tgz nginx/build/scremsong
-cp ../demsausage-v3/build/frontend-public-"$DEMSAUSAGE_VERSION".tgz nginx/build/demsausage
-cp ../demsausage-v3/build/frontend-admin-"$DEMSAUSAGE_ADMIN_VERSION".tgz nginx/build/demsausage-admin
-cp ../demsausage-v3/build/django-"$DEMSAUSAGE_DJANGO_VERSION".tgz nginx/build/demsausage-api
+cp ../demsausage/build/frontend-public-"$DEMSAUSAGE_VERSION".tgz nginx/build/demsausage
+cp ../demsausage/build/frontend-admin-"$DEMSAUSAGE_ADMIN_VERSION".tgz nginx/build/demsausage-admin
+cp ../demsausage/build/django-"$DEMSAUSAGE_DJANGO_VERSION".tgz nginx/build/demsausage-api
 
 echo building prod nginx container
 (cd nginx && docker build -t sausage/nginx:latest .)
