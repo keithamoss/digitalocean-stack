@@ -16,6 +16,5 @@ services:
             - ./nginx/nginx/docker.prod.scremsong.conf:/etc/nginx/conf.d/nginx.conf
         depends_on:
             - scremsong
-            - memcached
         ports:
             - "443:443"
