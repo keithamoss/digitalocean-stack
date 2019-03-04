@@ -1,0 +1,25 @@
+version: "3.7"
+services:
+    demsausage:
+        image: keithmoss/demsausage-django:latest
+        command: supervisord
+        volumes:
+            - ./logs/demsausage-django:/app/logs:delegated
+        env_file:
+            - secrets/sausage-web.env
+            - secrets/sausage-db.env
+    memcached:
+        image: memcached
+        expose:
+            - "11211"
+    nginx:
+        image: keithmoss/sausage-nginx:latest
+        volumes:
+            - ./keys/:/app/keys/:delegated
+            - ./logs/nginx:/var/log/nginx:delegated
+            - ./nginx/nginx/docker.prod.demsausage.conf:/etc/nginx/conf.d/nginx.conf
+        depends_on:
+            - demsausage
+            - memcached
+        ports:
+            - "443:443"
