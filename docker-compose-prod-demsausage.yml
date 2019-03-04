@@ -10,8 +10,6 @@ services:
             - secrets/sausage-db.env
     memcached:
         image: memcached
-        expose:
-            - "11211"
     nginx:
         image: keithmoss/sausage-nginx:latest
         volumes:
