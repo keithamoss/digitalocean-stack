@@ -17,3 +17,4 @@ ADD build/scremsong/*.tgz /frontend/scremsong/
 ADD build/demsausage/*.tgz /frontend/demsausage/
 ADD build/demsausage-admin/*.tgz /frontend/demsausage-admin/
 ADD build/demsausage-api/*.tgz /frontend/demsausage-api/
+ADD build/scremsong-api/*.tgz /frontend/scremsong-api/
