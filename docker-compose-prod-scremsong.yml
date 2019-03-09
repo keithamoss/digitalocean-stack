@@ -8,8 +8,6 @@ services:
         env_file:
             - secrets/scremsong-web.env
             - secrets/scremsong-db.env
-        depends_on:
-            - redis
     # flower:
     #     image: mher/flower
     #     env_file:
