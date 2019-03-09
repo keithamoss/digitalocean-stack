@@ -55,7 +55,7 @@ runcmd:
     - ln -s /apps/demsausage /apps/digitalocean-stack/demsausage
     # Setup Nginx with SSL certs from CloudFlare
     - cd nginx
-    - cfca getcert -hostnames democracysausage.org,*.democracysausage.org,scremsong.democracysausage.org,scremsong-api.democracysausage.org
+    - cfca getcert -hostnames democracysausage.org,*.democracysausage.org,scremsong.democracysausage.org
     # Docker up!
     - cd /apps/digitalocean-stack
     - mkdir secrets

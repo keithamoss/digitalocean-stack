@@ -1,21 +1,5 @@
 version: "3.7"
 services:
-    rabbitmq:
-        image: rabbitmq:3.7.8-alpine
-        volumes:
-            # Might need to `docker commit` too if we ever change settings? Not sure. (Ref. https://github.com/docker-library/rabbitmq/issues/106#issuecomment-380519695)
-            - ./rabbitmq-data:/var/lib/rabbitmq
-        ports:
-            - "5672:5672"
-        env_file:
-            - db/secrets/rabbitmq.env
-    redis:
-        image: redis:5.0.3-alpine3.8
-        ports:
-            - "6379:6379"
-        # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
-        sysctls:
-            net.core.somaxconn: "511"
     scremsong:
         image: keithmoss/scremsong-django:latest
         command: supervisord
@@ -25,15 +9,15 @@ services:
             - secrets/scremsong-web.env
             - secrets/scremsong-db.env
         depends_on:
-            - rabbitmq
             - redis
-    flower:
-        image: mher/flower
-        environment:
-            - CELERY_BROKER_URL=redis://redis:6379/0
-            - FLOWER_PORT=8888
-        ports:
-            - 8888:8888
+    # flower:
+    #     image: mher/flower
+    #     env_file:
+    #         - secrets/scremsong-web.env
+    #     environment:
+    #         - FLOWER_PORT=8888
+    #     ports:
+    #         - 8888:8888
     nginx:
         image: keithmoss/sausage-nginx:latest
         volumes:
