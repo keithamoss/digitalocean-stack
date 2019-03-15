@@ -10,6 +10,9 @@ services:
             - secrets/sausage-db.env
     memcached:
         image: memcached
+        command:
+            # 5mb to accommodate the larger polling place GeoJSON objects
+            - '--max-item-size=5242880'
     nginx:
         image: keithmoss/sausage-nginx:latest
         volumes:
