@@ -1,12 +1,12 @@
 #!/bin/bash
 
-DEMSAUSAGE_VERSION="0.2.7"
-DEMSAUSAGE_ADMIN_VERSION="0.2.7"
-DEMSAUSAGE_DJANGO_VERSION="0.2.7"
-SCREMSONG_VERSION="2.1.7"
-SCREMSONG_DJANGO_VERSION="2.1.7"
+DEMSAUSAGE_VERSION="0.2.8"
+DEMSAUSAGE_ADMIN_VERSION="0.2.8"
+DEMSAUSAGE_DJANGO_VERSION="0.2.8"
+SCREMSONG_VERSION="2.1.13"
+SCREMSONG_DJANGO_VERSION="2.1.13"
 
-\rm -f nginx/build/*.tgz
+\rm -f nginx/build/*/*.tgz
 mkdir -p nginx/build/scremsong
 mkdir -p nginx/build/scremsong-api
 mkdir -p nginx/build/demsausage
