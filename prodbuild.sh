@@ -1,8 +1,17 @@
 #!/bin/bash
 
-DEMSAUSAGE_VERSION="0.3.0"
-DEMSAUSAGE_ADMIN_VERSION="0.3.0"
-DEMSAUSAGE_DJANGO_VERSION="0.3.0"
+DEMSAUSAGE_VERSION_FILE="../demsausage/VERSION"
+if [ ! -f "$DEMSAUSAGE_VERSION_FILE" ]; then
+    echo "DemSausage version file not found!"
+    exit 1
+fi
+
+DEMSAUSAGE_VERSION=`cat $DEMSAUSAGE_VERSION_FILE`
+PUSH="$1"
+
+DEMSAUSAGE_VERSION="$DEMSAUSAGE_VERSION"
+DEMSAUSAGE_ADMIN_VERSION="$DEMSAUSAGE_VERSION"
+DEMSAUSAGE_DJANGO_VERSION="$DEMSAUSAGE_VERSION"
 SCREMSONG_VERSION="2.1.15"
 SCREMSONG_DJANGO_VERSION="2.1.15"
 
@@ -25,3 +34,7 @@ cp ../demsausage/build/django-"$DEMSAUSAGE_DJANGO_VERSION".tgz nginx/build/demsa
 echo building prod nginx container
 (cd nginx && docker build -t sausage/nginx:latest .)
 # (cd nginx-prod && docker build --no-cache -t sausage/nginx:latest . && cd ..)
+
+if [ "$PUSH" = "push" ]; then
+    ./prodbuild-dockerpush.sh
+fi

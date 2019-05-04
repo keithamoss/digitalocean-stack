@@ -3,15 +3,20 @@
 # push images to Docker Hub
 # @TODO version images
 
-ver="$1"
+if [ ! -f ./VERSION ]; then
+    echo "File not found!"
+    exit 1
+fi
 
-if [ x"$ver" = x ]; then
+VERSION=`cat VERSION`
+
+if [ x"$VERSION" = x ]; then
         echo "set a version!"
         exit 1
 fi
 
 echo pushing prod nginx container
 docker tag sausage/nginx:latest keithmoss/sausage-nginx:latest
-docker tag sausage/nginx:latest keithmoss/sausage-nginx:"$ver"
+docker tag sausage/nginx:latest keithmoss/sausage-nginx:"$VERSION"
 docker push keithmoss/sausage-nginx:latest
-docker push keithmoss/sausage-nginx:"$ver"
+docker push keithmoss/sausage-nginx:"$VERSION"
