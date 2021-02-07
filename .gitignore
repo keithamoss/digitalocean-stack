@@ -16,3 +16,4 @@ src/**/*.pyc
 src/cloud-config-db-actual.yaml
 keys/
 nginx/build/
+.DS_Store
