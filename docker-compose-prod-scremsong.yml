@@ -26,3 +26,17 @@ services:
       - scremsong
     ports:
       - "443:443"
+  logrotate:
+    image: blacklabelops/logrotate
+    volumes:
+      - ./logs/scremsong-django:/app/logs/scremsong-django:delegated
+      - ./logs/nginx:/app/logs/nginx:delegated
+    environment:
+      - LOGS_DIRECTORIES=/app/logs
+      - LOGROTATE_INTERVAL=weekly
+      - LOGROTATE_COPIES=520
+      - LOGROTATE_SIZE=20M
+      - LOGROTATE_COMPRESSION=compress
+      - LOGROTATE_PARAMETERS=f
+      - LOGROTATE_LOGFILE=/app/logs/logrotate.log
+      - TZ=Australia/Perth
