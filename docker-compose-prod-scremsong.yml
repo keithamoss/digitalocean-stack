@@ -31,12 +31,14 @@ services:
     volumes:
       - ./logs/scremsong-django:/app/logs/scremsong-django:delegated
       - ./logs/nginx:/app/logs/nginx:delegated
+      - ./logs:/app/logs:delegated
     environment:
       - LOGS_DIRECTORIES=/app/logs
-      - LOGROTATE_INTERVAL=weekly
+      - LOGROTATE_INTERVAL=hourly
       - LOGROTATE_COPIES=520
       - LOGROTATE_SIZE=20M
       - LOGROTATE_COMPRESSION=compress
       - LOGROTATE_PARAMETERS=f
       - LOGROTATE_LOGFILE=/app/logs/logrotate.log
+      - LOGROTATE_DATEFORMAT=-%d-%m-%Y_%H:%M"
       - TZ=Australia/Perth
