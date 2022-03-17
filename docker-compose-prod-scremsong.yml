@@ -40,5 +40,5 @@ services:
       - LOGROTATE_COMPRESSION=compress
       - LOGROTATE_PARAMETERS=f
       - LOGROTATE_LOGFILE=/app/logs/logrotate.log
-      - LOGROTATE_DATEFORMAT=-%d-%m-%Y_%H:%M"
+      - LOGROTATE_DATEFORMAT=-%d-%m-%Y_%H:%M
       - TZ=Australia/Perth
