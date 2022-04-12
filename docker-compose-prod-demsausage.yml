@@ -13,6 +13,15 @@ services:
         command:
             # 5mb to accommodate the larger polling place GeoJSON objects
             - '--max-item-size=5242880'
+    rq_dashboard:
+        build: rq-dashboard/
+        entrypoint: /app/docker-entrypoint.sh
+        volumes:
+            - ./rq-dashboard/:/app:delegated
+        ports:
+            - "9181:9181"
+        env_file:
+            - secrets/rq-dashboard.env
     nginx:
         image: keithmoss/sausage-nginx:latest
         volumes:
@@ -22,5 +31,6 @@ services:
         depends_on:
             - demsausage
             - memcached
+            - rq_dashboard
         ports:
             - "443:443"

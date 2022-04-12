@@ -8,10 +8,6 @@ services:
     env_file:
       - secrets/scremsong-web.env
       - secrets/scremsong-db.env
-  rq_dashboard:
-    build: rq-dashboard/
-    env_file:
-      - secrets/scremsong-rq-dashboard.env
   nginx:
     image: keithmoss/sausage-nginx:latest
     volumes:
