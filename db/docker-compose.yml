@@ -23,7 +23,7 @@ services:
         depends_on:
             - db
     redis:
-        image: bitnami/redis:5.0.3-debian-9-r72
+        image: bitnami/redis:6.2-debian-10
         ports:
             - "6379:6379"
         env_file:
