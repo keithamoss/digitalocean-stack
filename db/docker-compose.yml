@@ -17,7 +17,7 @@ services:
             # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
             # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
     pgbackups3:
-        image: schickling/postgres-backup-s3
+        image: keithmoss/postgres-backup-s3:15
         env_file:
             - secrets/pgbackups3.env
         depends_on:
