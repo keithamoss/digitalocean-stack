@@ -42,3 +42,20 @@ services:
       - rq_dashboard
     ports:
       - "443:443"
+  logrotate:
+    image: blacklabelops/logrotate
+    volumes:
+      - ./logs/demsausage-django:/app/logs/demsausage-django:delegated
+      - ./logs/nginx:/app/logs/nginx:delegated
+      - ./logs:/app/logs:delegated
+    environment:
+      - LOGS_DIRECTORIES=/app/logs
+      - LOGROTATE_INTERVAL=weekly
+      - LOGROTATE_COPIES=520
+      - LOGROTATE_SIZE=20M
+      - LOGROTATE_COMPRESSION=compress
+      - LOGROTATE_PARAMETERS=f
+      - LOGROTATE_LOGFILE=/app/logs/logrotate.log
+      - LOGROTATE_DATEFORMAT=-%d-%m-%Y_%H:%M
+      - LOGROTATE_OLDDIR=./old
+      - TZ=Australia/Perth
