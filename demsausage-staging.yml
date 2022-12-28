@@ -26,9 +26,6 @@ services:
       net.core.somaxconn: "511"
   rq_dashboard:
     image: keithmoss/demsausage-rq-dashboard:latest-staging
-    entrypoint: /app/docker-entrypoint.sh
-    volumes:
-      - ./rq-dashboard/:/app:delegated
     ports:
       - "9181:9181"
     env_file:
