@@ -1,0 +1,47 @@
+version: "3.7"
+services:
+  demsausage:
+    image: keithmoss/demsausage-django:latest-staging
+    command: supervisord
+    volumes:
+      - ./logs/demsausage-django:/app/logs:delegated
+    env_file:
+      - secrets/sausage-web.env
+      - secrets/sausage-db.env
+  memcached:
+    image: memcached
+    command:
+      # 5mb to accommodate the larger polling place GeoJSON objects
+      - "--max-item-size=5242880"
+  redis:
+    image: bitnami/redis:6.2-debian-10
+    ports:
+      - "6379:6379"
+    env_file:
+      - secrets/redis.env
+    volumes:
+      - ./redis:/bitnami/redis/data
+    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
+    sysctls:
+      net.core.somaxconn: "511"
+  rq_dashboard:
+    image: keithmoss/demsausage-rq-dashboard:latest-staging
+    entrypoint: /app/docker-entrypoint.sh
+    volumes:
+      - ./rq-dashboard/:/app:delegated
+    ports:
+      - "9181:9181"
+    env_file:
+      - secrets/rq-dashboard.env
+  nginx:
+    image: keithmoss/demsausage-nginx:latest-staging
+    volumes:
+      - ./keys/:/app/keys/:delegated
+      - ./logs/nginx:/var/log/nginx:delegated
+      - ./nginx/nginx/docker.prod.demsausage.conf:/etc/nginx/conf.d/nginx.conf
+    depends_on:
+      - demsausage
+      - memcached
+      - rq_dashboard
+    ports:
+      - "443:443"
