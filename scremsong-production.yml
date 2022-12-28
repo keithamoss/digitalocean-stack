@@ -1,7 +1,7 @@
 version: "3.7"
 services:
   scremsong:
-    image: keithmoss/scremsong-django:latest
+    image: keithmoss/scremsong-django:latest-production
     command: supervisord
     volumes:
       - ./logs/scremsong-django:/app/logs:delegated
@@ -9,7 +9,7 @@ services:
       - secrets/scremsong-web.env
       - secrets/scremsong-db.env
   nginx:
-    image: keithmoss/sausage-nginx:latest
+    image: keithmoss/scremsong-nginx:latest-production
     volumes:
       - ./keys/:/app/keys/:delegated
       - ./logs/nginx:/var/log/nginx:delegated
