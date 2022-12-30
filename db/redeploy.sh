@@ -1,6 +1,6 @@
 #!/bin/bash
 
 git pull origin master
-docker-compose -f docker-compose.yml pull
-docker-compose -f docker-compose.yml stop
-docker-compose -f docker-compose.yml up --remove-orphans -d
+docker compose -f db-production.yml pull
+docker compose -f db-production.yml stop
+docker compose -f db-production.yml up --remove-orphans -d
