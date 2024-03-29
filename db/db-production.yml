@@ -1,4 +1,4 @@
-version: "3.7"
+version: "3.8"
 services:
   db:
     image: postgis/postgis:15-3.3-alpine
@@ -16,10 +16,16 @@ services:
 
       # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
       # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
-  pgbackups3:
+  pgbackups3-prod:
     image: eeshugerman/postgres-backup-s3:15
     env_file:
-      - secrets/pgbackups3.env
+      - secrets/pgbackups3-prod.env
+    depends_on:
+      - db
+  pgbackups3-staging:
+    image: eeshugerman/postgres-backup-s3:15
+    env_file:
+      - secrets/pgbackups3-staging.env
     depends_on:
       - db
   redis:
