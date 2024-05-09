@@ -15,6 +15,7 @@ Our new deployment pattern is:
 
 # TODO
 
+0. Add active monitoring and alarms for the database being down and/or non-responsive (incl. alarms for important metrics being too high for too long)
 1. Migrate Mapa PROD across so we can finally destroy that droplet
 2. Plan for migrating DemSausage across to allow it to run on Lambdas
   2.1 Refer here for the initial set of changes we made to Mapa: https://github.com/keithamoss/mapa/commit/c9f01f398babfaacf5b57c1c9ca44910775cb3ca
