@@ -1,5 +1,11 @@
 # TODO
 
+# Automatic rebooting
+
+We're using `restart: always` on each container in `db-production.yml` to get Docker to bring each container back up when the server reboots.
+
+We briefly tried using crontab with `@reboot` (including monitoring with [cronitor](https://cronitor.io)), but couldn't get it to work - or even report to cronitor reliably. Probably some issue with the user it's running as, the working directory, and other such junk.
+
 # Health Checks
 
 Add some simple health checks for our production services.

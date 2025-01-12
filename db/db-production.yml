@@ -2,6 +2,7 @@ version: "3.8"
 services:
   db:
     image: postgis/postgis:15-3.3-alpine
+    restart: always
     command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
     ports:
       - "5432:5432"
@@ -18,18 +19,21 @@ services:
       # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
   pgbackups3-prod:
     image: eeshugerman/postgres-backup-s3:15
+    restart: always
     env_file:
       - secrets/pgbackups3-prod.env
     depends_on:
       - db
   pgbackups3-staging:
     image: eeshugerman/postgres-backup-s3:15
+    restart: always
     env_file:
       - secrets/pgbackups3-staging.env
     depends_on:
       - db
   redis:
     image: bitnami/redis:6.2-debian-10
+    restart: always
     ports:
       - "6379:6379"
     env_file:
