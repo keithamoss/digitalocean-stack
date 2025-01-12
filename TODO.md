@@ -2,7 +2,9 @@
 
 # Automatic rebooting
 
-We're using `restart: always` on each container in `db-production.yml` to get Docker to bring each container back up when the server reboots.
+We're using `restart: always` on each container in `db-production.yml` to get Docker to bring each container back up when the database server reboots.
+
+This isn't like running `redeploy.sh`, since it won't pull down a new version of this repo or new container images - but whatever, we do all of that manually still anyway.
 
 We briefly tried using crontab with `@reboot` (including monitoring with [cronitor](https://cronitor.io)), but couldn't get it to work - or even report to cronitor reliably. Probably some issue with the user it's running as, the working directory, and other such junk.
 
