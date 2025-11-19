@@ -1,4 +1,3 @@
-version: "3.7"
 services:
   demsausage:
     image: keithmoss/demsausage-django:latest-production
