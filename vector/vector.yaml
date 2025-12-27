@@ -1,0 +1,89 @@
+# NEXT STEPS:
+# - Ask Copilot for advice on improving this setup - it has quite a few suggestions
+
+data_dir: /var/lib/vector
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  django_logs:
+    type: file
+    include:
+      - /logs/demsausage-django/*.log
+    read_from: end
+    ignore_older: 604800
+  nginx_logs:
+    type: file
+    include:
+      - /logs/nginx/*.log
+    read_from: end
+    ignore_older: 604800
+  internal_metrics:
+    type: internal_metrics
+
+# NOTE: This didn't really work as expected, so skipping for now.
+#       There seemed to be options for doing this directly in NGINX anyway?
+#       And presumably a way of doing it directly from Django too?
+#       i.e. Having both sources write the component parts of the logs rather than just the raw text as JSON
+# 
+# transforms:
+#   nginx_parse:
+#     type: remap
+#     inputs:
+#       - nginx_logs
+#     source: |-
+#       .raw = string!(.message)
+#       match, err = parse_regex(.raw, r'^(?P<remote_addr>[^ ]+) - (?P<remote_user>[^ ]+) \[(?P<time_local>[^\]]+)\] "(?P<request>[A-Z]+ [^ ]+ [A-Z0-9/\.]+)" (?P<status>\d{3}) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"')
+#       if err == null {
+#         .remote_addr = match.remote_addr
+#         if match.remote_user != "-" { .remote_user = match.remote_user }
+#         .time_local = match.time_local
+#         .request = match.request
+#         .status = to_int(match.status)
+#         .body_bytes_sent = to_int(match.body_bytes_sent)
+#         if match.http_referer != "-" { .http_referer = match.http_referer }
+#         .http_user_agent = match.http_user_agent
+#       }
+
+sinks:
+  s3_django:
+    type: aws_s3
+    storage_class: INTELLIGENT_TIERING
+    inputs:
+      - django_logs
+    bucket: ${VECTOR_S3_BUCKET}
+    region: ${AWS_REGION}
+    compression: gzip
+    encoding:
+      codec: json
+    key_prefix: pi-logs/demsausage/django/%Y/%m/%d/
+    filename_extension: json.gz
+    batch:
+      max_events: 5000
+      timeout_secs: 30
+    request:
+      concurrent: 2
+  s3_nginx:
+    type: aws_s3
+    storage_class: INTELLIGENT_TIERING
+    inputs:
+      - nginx_logs
+    bucket: ${VECTOR_S3_BUCKET}
+    region: ${AWS_REGION}
+    compression: gzip
+    encoding:
+      codec: json
+    key_prefix: pi-logs/demsausage/nginx/%Y/%m/%d/
+    filename_extension: json.gz
+    batch:
+      max_events: 5000
+      timeout_secs: 30
+    request:
+      concurrent: 2
+  prometheus:
+    type: prometheus_exporter
+    inputs:
+      - internal_metrics
+    address: 0.0.0.0:9090
