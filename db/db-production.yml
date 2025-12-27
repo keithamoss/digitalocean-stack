@@ -2,6 +2,7 @@ networks:
   backend-services:
     # Ensure the network is created by this compose file the first time we run it
     external: false
+    name: backend-services
 services:
   db:
     container_name: db
