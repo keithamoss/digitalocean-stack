@@ -1,6 +1,6 @@
 networks:
   test-backend-services:
-    external: true
+    external: false
 services:
   db:
     container_name: db
