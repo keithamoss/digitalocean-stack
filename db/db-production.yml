@@ -22,20 +22,20 @@ services:
 
       # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
       # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
-  pgbackups3-prod:
-    image: eeshugerman/postgres-backup-s3:15
-    restart: always
-    env_file:
-      - secrets/pgbackups3-prod.env
-    depends_on:
-      - db
-  pgbackups3-staging:
-    image: eeshugerman/postgres-backup-s3:15
-    restart: always
-    env_file:
-      - secrets/pgbackups3-staging.env
-    depends_on:
-      - db
+  # pgbackups3-prod:
+  #   image: eeshugerman/postgres-backup-s3:15
+  #   restart: always
+  #   env_file:
+  #     - secrets/pgbackups3-prod.env
+  #   depends_on:
+  #     - db
+  # pgbackups3-staging:
+  #   image: eeshugerman/postgres-backup-s3:15
+  #   restart: always
+  #   env_file:
+  #     - secrets/pgbackups3-staging.env
+  #   depends_on:
+  #     - db
   redis:
     container_name: redis
     image: redis:6.2-alpine
