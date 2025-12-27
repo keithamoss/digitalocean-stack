@@ -1,3 +1,6 @@
+networks:
+  test-backend-services:
+    external: true
 services:
   db:
     image: postgis/postgis:15-3.3-alpine
