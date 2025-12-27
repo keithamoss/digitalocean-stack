@@ -19,6 +19,8 @@ nginx/build/
 .DS_Store
 UPGRADE.md
 .dccache
+db/redis-data/
+db/*.dump
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
