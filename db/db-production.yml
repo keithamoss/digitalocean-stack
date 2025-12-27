@@ -10,7 +10,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - backend-services
+      - test-backend-services
     env_file:
       - secrets/db.env
     volumes:
@@ -44,7 +44,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - backend-services
+      - test-backend-services
     volumes:
       - ./redis-data:/data
       - ./redis:/usr/local/etc/redis:ro
