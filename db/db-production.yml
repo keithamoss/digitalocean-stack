@@ -1,10 +1,16 @@
+networks:
+  test-backend-services:
+    external: true
 services:
   db:
-    image: postgis/postgis:15-3.3-alpine
+    container_name: db
+    image: ghcr.io/baosystems/postgis:15-3.3
     restart: always
     command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
     ports:
       - "5432:5432"
+    networks:
+      - backend-services
     env_file:
       - secrets/db.env
     volumes:
@@ -31,14 +37,17 @@ services:
     depends_on:
       - db
   redis:
-    image: bitnami/redis:6.2-debian-10
+    container_name: redis
+    image: redis:6.2-alpine
     restart: always
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
-    env_file:
-      - secrets/redis.env
+    networks:
+      - backend-services
     volumes:
-      - ./redis:/bitnami/redis/data
+      - ./redis-data:/data
+      - ./redis:/usr/local/etc/redis:ro
     # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
     sysctls:
       net.core.somaxconn: "511"
