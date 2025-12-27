@@ -1,9 +1,16 @@
+networks:
+  backend-services:
+    external: true
 services:
   demsausage:
     image: keithmoss/demsausage-django:latest-staging
     command: supervisord
+#    ports:
+#      - "8000:8000"
     volumes:
       - ./logs/demsausage-django:/app/logs:delegated
+    networks:
+      - backend-services
     env_file:
       - secrets/sausage-web.env
       - secrets/sausage-db.env
@@ -12,29 +19,34 @@ services:
     command:
       # 5mb to accommodate the larger polling place GeoJSON objects
       - "--max-item-size=5242880"
-  redis:
-    image: bitnami/redis:6.2-debian-10
-    ports:
-      - "6379:6379"
-    env_file:
-      - secrets/redis.env
-    volumes:
-      - ./redis:/bitnami/redis/data
-    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
-    sysctls:
-      net.core.somaxconn: "511"
+    networks:
+      - backend-services
+#  redis:
+#    image: bitnami/redis:6.2-debian-10
+#    ports:
+#      - "6379:6379"
+#    env_file:
+#      - secrets/redis.env
+#    volumes:
+#      - ./redis:/bitnami/redis/data
+#    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
+#    sysctls:
+#      net.core.somaxconn: "511"
   rq_dashboard:
     image: keithmoss/demsausage-rq-dashboard:latest-staging
     ports:
       - "9181:9181"
     env_file:
       - secrets/rq-dashboard.env
+    networks:
+      - backend-services
   nginx:
     image: keithmoss/demsausage-nginx:latest-staging
     volumes:
       - ./keys/:/app/keys/:delegated
       - ./logs/nginx:/var/log/nginx:delegated
       - ./nginx/docker.staging.demsausage.conf:/etc/nginx/conf.d/nginx.conf
+      - ./nginx/cloudflare_real_ip.conf:/etc/nginx/cloudflare_real_ip.conf
     depends_on:
       - demsausage
       - memcached
@@ -43,6 +55,12 @@ services:
       - "443:443"
       - "80:80"
     networks:
+      - backend-services
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    env_file:
+      - secrets/cloudflared.env
   logshipper:
     image: timberio/vector:0.51.1-alpine
     depends_on:
@@ -50,7 +68,7 @@ services:
       - nginx
     volumes:
       - ./logs:/logs:ro
-      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - ./vector/vector.yaml:/etc/vector/vector.yaml
     environment:
       - AWS_REGION=ap-southeast-2
       - VECTOR_S3_BUCKET=digitalocean-stack
@@ -58,5 +76,21 @@ services:
       - secrets/vector.env
     ports:
       - "9090:9090"  # Prometheus metrics exporter from vector
-      - "8686:8686"  # Vector admin API
     restart: unless-stopped
+#  logrotate:
+#    image: blacklabelops/logrotate
+#    volumes:
+#      - ./logs/demsausage-django:/app/logs/demsausage-django:delegated
+#      - ./logs/nginx:/app/logs/nginx:delegated
+#      - ./logs:/app/logs:delegated
+#    environment:
+#      - LOGS_DIRECTORIES=/app/logs
+#      - LOGROTATE_INTERVAL=weekly
+#      - LOGROTATE_COPIES=520
+#      - LOGROTATE_SIZE=20M
+#      - LOGROTATE_COMPRESSION=compress
+#      - LOGROTATE_PARAMETERS=f
+#      - LOGROTATE_LOGFILE=/app/logs/logrotate.log
+#      - LOGROTATE_DATEFORMAT=-%d-%m-%Y_%H:%M
+#      - LOGROTATE_OLDDIR=./old
+#      - TZ=Australia/Perth
