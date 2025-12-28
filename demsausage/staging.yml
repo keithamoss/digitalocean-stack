@@ -1,0 +1,65 @@
+networks:
+  backend-services:
+    external: true
+  demsausage:
+    # Ensure the network is created by this compose file the first time we run it
+    external: false
+    name: demsausage
+services:
+  demsausage:
+    image: keithmoss/demsausage-django:latest-staging
+    command: supervisord
+#    ports:
+#      - "8000:8000"
+    volumes:
+      - ./logs/demsausage-django:/app/logs:delegated
+    networks:
+      - backend-services
+      - demsausage
+    env_file:
+      - secrets/sausage-web.env
+      - secrets/sausage-db.env
+  memcached:
+    image: memcached
+    command:
+      # 5mb to accommodate the larger polling place GeoJSON objects
+      - "--max-item-size=5242880"
+    networks:
+      - backend-services
+      - demsausage
+#  redis:
+#    image: bitnami/redis:6.2-debian-10
+#    ports:
+#      - "6379:6379"
+#    env_file:
+#      - secrets/redis.env
+#    volumes:
+#      - ./redis:/bitnami/redis/data
+#    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
+#    sysctls:
+#      net.core.somaxconn: "511"
+  rq_dashboard:
+    image: keithmoss/demsausage-rq-dashboard:latest-staging
+    ports:
+      - "9181:9181"
+    env_file:
+      - secrets/rq-dashboard.env
+    networks:
+      - backend-services
+      - demsausage
+  # logshipper:
+  #   image: timberio/vector:0.51.1-alpine
+  #   depends_on:
+  #     - demsausage
+  #     # - nginx
+  #   volumes:
+  #     - ./logs:/logs:ro
+  #     - ./vector/vector.yaml:/etc/vector/vector.yaml
+  #   environment:
+  #     - AWS_REGION=ap-southeast-2
+  #     - VECTOR_S3_BUCKET=digitalocean-stack
+  #   env_file:
+  #     - secrets/vector.env
+  #   ports:
+  #     - "9090:9090"  # Prometheus metrics exporter from vector
+  #   restart: unless-stopped
