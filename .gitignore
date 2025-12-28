@@ -5,7 +5,8 @@ db-env-variables.env
 secrets.tar
 nginx/wildcard.democracysausage.org.*
 travis-secrets.txt
-secrets/
+/secrets/
+**/*/secrets/*.env
 db/postges-data/
 db/logs/
 db/notes.md
