@@ -1,6 +1,4 @@
 networks:
-  db:
-    external: true
   redis:
     external: true
   demsausage:
@@ -16,7 +14,6 @@ services:
     volumes:
       - ./logs/demsausage-django:/app/logs:delegated
     networks:
-      - db
       - redis
       - demsausage
     env_file:
