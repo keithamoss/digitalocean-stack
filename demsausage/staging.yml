@@ -9,8 +9,8 @@ services:
   demsausage:
     image: keithmoss/demsausage-django:latest-staging
     command: supervisord
-#    ports:
-#      - "8000:8000"
+    ports:
+     - "8000:8000"
     volumes:
       - ./logs/demsausage-django:/app/logs:delegated
     networks:
@@ -25,19 +25,7 @@ services:
       # 5mb to accommodate the larger polling place GeoJSON objects
       - "--max-item-size=5242880"
     networks:
-      - backend-services
       - demsausage
-#  redis:
-#    image: bitnami/redis:6.2-debian-10
-#    ports:
-#      - "6379:6379"
-#    env_file:
-#      - secrets/redis.env
-#    volumes:
-#      - ./redis:/bitnami/redis/data
-#    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
-#    sysctls:
-#      net.core.somaxconn: "511"
   rq_dashboard:
     image: keithmoss/demsausage-rq-dashboard:latest-staging
     ports:
