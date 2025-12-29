@@ -1,0 +1,21 @@
+networks:
+  redis:
+    # Ensure the network is created by this compose file the first time we run it
+    external: false
+    name: redis
+services:
+  redis:
+    container_name: redis
+    image: redis:6.2-alpine
+    restart: always
+    command: redis-server /usr/local/etc/redis/conf/redis.conf
+    ports:
+      - "6379:6379"
+    networks:
+      - redis
+    volumes:
+      - ./data:/data
+      - ./conf:/usr/local/etc/redis/conf:ro
+    # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
+    sysctls:
+      net.core.somaxconn: "511"

@@ -1,5 +1,7 @@
 networks:
-  backend-services:
+  db:
+    external: true
+  redis:
     external: true
   demsausage:
     # Ensure the network is created by this compose file the first time we run it
@@ -14,7 +16,8 @@ services:
     volumes:
       - ./logs/demsausage-django:/app/logs:delegated
     networks:
-      - backend-services
+      - db
+      - redis
       - demsausage
     env_file:
       - secrets/sausage-web.env
@@ -33,7 +36,7 @@ services:
     env_file:
       - secrets/rq-dashboard.env
     networks:
-      - backend-services
+      - redis
       - demsausage
   # logshipper:
   #   image: timberio/vector:0.51.1-alpine
