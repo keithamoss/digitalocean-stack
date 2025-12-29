@@ -201,6 +201,7 @@ def download_artifact(artifact: dict, dest_dir: Path, token: str | None) -> None
     else:
         _extract_nested_archives(members, artifact_dir)
         destination.unlink(missing_ok=True)
+    print()
 
 
 def ensure_tools_available() -> None:
