@@ -32,22 +32,21 @@ fi
 
 RELOAD=0
 
-if [ -L "$CONF_DEST" ]; then
-    current_target="$(readlink "$CONF_DEST")"
-    if [ "$current_target" != "$CONF_SRC" ]; then
-        echo "Existing symlink target mismatch: $current_target (expected $CONF_SRC). Refusing to change." >&2
-        exit 1
-    fi
-
-    echo "Config already published (symlink in place); skipping reload."
-    exit 0
-elif [ -e "$CONF_DEST" ]; then
-    echo "Refusing to overwrite non-symlink path: $CONF_DEST" >&2
+if [ -e "$CONF_DEST" ] && [ ! -d "$CONF_DEST" ]; then
+    echo "Refusing to overwrite non-directory path: $CONF_DEST" >&2
     exit 1
-else
-    ln -s "$CONF_SRC" "$CONF_DEST"
-    echo "Published symlink: $CONF_DEST -> $CONF_SRC"
+fi
+
+mkdir -p "$CONF_DEST"
+
+echo "Syncing configs to nginx workspace..."
+rsync_output="$(rsync -a --delete --out-format='%n%L' "$CONF_SRC"/ "$CONF_DEST"/)"
+
+if [ -n "$rsync_output" ]; then
+    echo "$rsync_output"
     RELOAD=1
+else
+    echo "No config changes detected."
 fi
 
 if [ "$RELOAD" -eq 1 ]; then

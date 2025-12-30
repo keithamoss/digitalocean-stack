@@ -26,25 +26,12 @@ fi
 
 RELOAD=0
 
-if [ -L "$CONF_DEST" ]; then
-    target="$(readlink "$CONF_DEST")"
-    if [ -z "$target" ]; then
-        echo "Symlink exists but target is empty: $CONF_DEST" >&2
-        exit 1
-    fi
-    if [ ! -e "$target" ]; then
-        echo "Symlink target missing: $target (from $CONF_DEST)" >&2
-        exit 1
-    fi
-
-    rm "$CONF_DEST"
-    echo "Removed symlink: $CONF_DEST (target: $target)"
+if [ -d "$CONF_DEST" ]; then
+    echo "Removing published config directory at $CONF_DEST"
+    rm -rf "$CONF_DEST"
     RELOAD=1
-elif [ -d "$CONF_DEST" ]; then
-    echo "Refusing to remove directory at $CONF_DEST (expected symlink)." >&2
-    exit 1
-elif [ -e "$CONF_DEST" ]; then
-    echo "Refusing to remove non-symlink path: $CONF_DEST" >&2
+elif [ -e "$CONF_DEST" ] || [ -L "$CONF_DEST" ]; then
+    echo "Refusing to remove non-directory path: $CONF_DEST" >&2
     exit 1
 else
     echo "Config not published: $CONF_DEST"
