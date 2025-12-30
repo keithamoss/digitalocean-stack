@@ -1,0 +1,14 @@
+services:
+  foundry:
+    image: felddy/foundryvtt:13.351
+    volumes:
+      - ./data:/data
+    env_file:
+      - ./secrets/foundry.env
+    environment:
+      - FOUNDRY_IP_DISCOVERY=false
+      - FOUNDRY_MINIFY_STATIC_FILES=true
+      - FOUNDRY_TELEMETRY=false
+      - FOUNDRY_TZ=Australia/Perth
+    ports:
+      - "30000:30000"
