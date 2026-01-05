@@ -1,5 +1,3 @@
-# Tidy up
-
 # MVP
 0. Spin up cloud-based app server
 1. Spin up managed database service
