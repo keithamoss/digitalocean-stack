@@ -1,6 +1,6 @@
 # How will we achieve...
 
-- Disk backup snapshots / some other backup strategy (think: DR)
+- Disk backup snapshots / some other backup strategy (think: DR) + include database backups
 - Pi usage monitoring and alerting (see that /r/selfhosting tab open on my phone)
 - Deploy to / from cloud
 - Logs

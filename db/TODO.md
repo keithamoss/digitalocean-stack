@@ -25,4 +25,9 @@ Had to run this to change the password to one without special chars because some
 
 ALTER USER postgres WITH PASSWORD 'NEW PASSWORD WITHOUT SPECIAL CHARS';
 
+# Tune postgresql.conf for our Pi and it's hardware
+
+# Upgrade
+Let's check if everything is ready to go to v18 yet
+
 # Support connection ONLY over SSL
