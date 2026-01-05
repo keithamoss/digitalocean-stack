@@ -1,21 +1,7 @@
-deploy_key
-deploy_key.pub
-*-web-variables.env
-db-env-variables.env
-secrets.tar
-nginx/wildcard.democracysausage.org.*
-travis-secrets.txt
+.DS_Store
 /secrets/
 **/*/secrets/*.env
 logs/
-stack-a-*.zip
-src/**/*.pyc
-src/cloud-config-db-actual.yaml
-keys/
-nginx/build/
-.DS_Store
-UPGRADE.md
-.dccache
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
