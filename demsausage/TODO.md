@@ -1,3 +1,8 @@
+# Check screenshot generation works...
+In the absence of this bit of config: https://github.com/keithamoss/demsausage/blob/d7e6b531ca6b31bd4fcf3a888cb5b967dcff51b9/docker-compose.yml#L135
+
+I think I also need to rotate the GitHub PAT token
+
 # Handle logs
 
 # Handle these errors from the gunicorn logs
@@ -15,3 +20,5 @@
   from pkg_resources import iter_entry_points
 /usr/local/lib/python3.9/site-packages/gevent/events.py:74: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
   from pkg_resources import iter_entry_points
+
+# Could CloudFlare replace our memcached use?

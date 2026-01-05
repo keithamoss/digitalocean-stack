@@ -1,3 +1,6 @@
+# Changed image to official Redis
+Why didn't we use that originally?
+
 # Deal with this WARNING
 
 redis  | 1:C 29 Dec 2025 06:03:24.891 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
