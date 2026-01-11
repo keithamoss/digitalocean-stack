@@ -1,3 +1,13 @@
+# Running thoughts
+
+- MVP push up db/bring db home
+- Database backups (/pi, /do)
+- > Bring down AWS DB
+- > Bring down and snapshot DO Staging and PROD (?)
+- Automate IP address allow-listing for Mapa
+- Pi backup solution
+- Log backups or streaming
+
 # How will we achieve...
 
 - Disk backup snapshots / some other backup strategy (think: DR) + include database backups
