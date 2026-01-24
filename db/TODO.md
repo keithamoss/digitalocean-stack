@@ -1,12 +1,24 @@
 # MVP
-0. Spin up cloud-based app server
-1. Spin up managed database service
-2. Stop writes, allow transactions to finalise
-3. Dump backup
-4. Restore backup
-5. Repoint DNS
-6. Spin up cloud-based apps
+0. Spin up cloud-based app server [DONE]
+1. Spin up cloud-based apps using Pi database [DONE]
+2. Spin up managed database service [DONE]
+3. Stop writes, allow transactions to finalise [DONE]
+4. Dump backup [DONE]
+5. Restore backup [DONE]
+6. Repoint DNS
 7. (Maybe?) Bounce self-hosted apps to force reconnect
+
+# Migration: DO PostgreSQL's logs
+There's no way to download them via the UI or CLI. The only option is to forward them to a log service.
+
+All too hard at the moment, so leaving it for another day.
+
+# Separating DBs
+There's less admin to do if all we're doing is pushing DemSausage PROD's database to the cloud - not the whole database, not all PROD applications. But that means restructuring it all and updating all of ours apps.
+
+If we do this, we need to tweak our DNS so there's a standalone e.g. demsausage-prod.db.keithmoss.me alongside e.g. db.keithmoss.me used for everything else
+
+In doing this, we also need to change to use the same port on the Pi's database as DO (25060).
 
 # Image change
 Changed PostgreSQL/PostGIS image because the official images are all AMD-based, not ARM

@@ -1,5 +1,9 @@
 {
   "cSpell.words": [
-    "cloudflared"
-  ]
+    "cloudflared",
+    "schemaname",
+    "SSLMODE"
+  ],
+  "snyk.advanced.organization": "92282382-834b-42ca-ba1d-ad8677bca052",
+  "snyk.advanced.autoSelectOrganization": true
 }
