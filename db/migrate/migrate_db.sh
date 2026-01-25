@@ -19,6 +19,7 @@ set -euo pipefail
 
 # Direction control
 DIRECTION=""
+RENAME_SOURCE=""
 
 # Runtime variables loaded from config (SOURCE_*/TARGET_* directly from .env)
 SOURCE_HOST=""
@@ -132,7 +133,7 @@ Help:
   -h, --help                     Show this message
 
 Configuration file must contain (see migrate.example.env):
-  DB_NAME, SCHEMA_NAME
+  DB_NAME, SCHEMA_NAME, RENAME_SOURCE (true|false)
   SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASS, SOURCE_SSLMODE, SOURCE_ADMIN_DB, SOURCE_APP_ROLE
   TARGET_HOST, TARGET_PORT, TARGET_USER, TARGET_PASS, TARGET_SSLMODE, TARGET_ADMIN_DB, TARGET_APP_ROLE
   TARGET_APP_ROLE_PASSWORD (required - role will be created with LOGIN capability)
@@ -143,6 +144,9 @@ Examples:
   
   # Bring database home from DO to Pi
   bash db/migrate_db.sh --direction do-to-pi --config /tmp/migrate.env
+  
+  # Set RENAME_SOURCE=true in the .env file to rename source after migration
+  # Set RENAME_SOURCE=false to keep source database name unchanged
 EOF
 }
 
@@ -204,7 +208,7 @@ parse_direction() {
   
   # Validate all required variables are set
   local required_vars=(
-    "DB_NAME" "SCHEMA_NAME"
+    "DB_NAME" "SCHEMA_NAME" "RENAME_SOURCE"
     "SOURCE_HOST" "SOURCE_PORT" "SOURCE_USER" "SOURCE_SSLMODE" 
     "SOURCE_ADMIN_DB" "SOURCE_APP_ROLE"
     "TARGET_HOST" "TARGET_PORT" "TARGET_USER" "TARGET_SSLMODE"
@@ -218,6 +222,12 @@ parse_direction() {
       exit $EXIT_MISSING_VARS
     fi
   done
+  
+  # Validate RENAME_SOURCE value
+  if [[ "$RENAME_SOURCE" != "true" && "$RENAME_SOURCE" != "false" ]]; then
+    log "Invalid value for RENAME_SOURCE: $RENAME_SOURCE (must be 'true' or 'false')"
+    exit $EXIT_MISSING_VARS
+  fi
 }
 
 # Check for old migrated databases on source to warn user
@@ -693,13 +703,26 @@ print_rollback_guidance() {
   log "=== ROLLBACK GUIDANCE ==="
   log "If you need to rollback, run these SQL commands:"
   log ""
-  log "1. On source ($SOURCE_LABEL) - unfreeze and rename back:"
-  log "   ALTER DATABASE \"$renamed_db\" RESET default_transaction_read_only;"
-  log "   ALTER DATABASE \"$renamed_db\" RENAME TO \"$DB_NAME\";"
-  log ""
-  log "2. On target ($TARGET_LABEL) - drop the migrated database:"
-  log "   DROP DATABASE \"$DB_NAME\";"
-  log ""
+  
+  if [[ "$renamed_db" != "$DB_NAME" ]]; then
+    # Database was renamed - show unfreeze and rename back
+    log "1. On source ($SOURCE_LABEL) - unfreeze and rename back:"
+    log "   ALTER DATABASE \"$renamed_db\" RESET default_transaction_read_only;"
+    log "   ALTER DATABASE \"$renamed_db\" RENAME TO \"$DB_NAME\";"
+    log ""
+    log "2. On target ($TARGET_LABEL) - drop the migrated database:"
+    log "   DROP DATABASE \"$DB_NAME\";"
+    log ""
+  else
+    # Database was not renamed - only show unfreeze
+    log "1. On source ($SOURCE_LABEL) - unfreeze database:"
+    log "   ALTER DATABASE \"$DB_NAME\" RESET default_transaction_read_only;"
+    log ""
+    log "2. On target ($TARGET_LABEL) - drop the migrated database:"
+    log "   DROP DATABASE \"$DB_NAME\";"
+    log ""
+  fi
+  
   log "3. Point app back to source and re-run this script after fixing any issues."
   log "========================="
 }
@@ -711,9 +734,8 @@ cleanup() {
     local frozen_db="${FROZEN_DB_NAME:-$DB_NAME}"
     echo "" >&2
     echo "=== WARNING: Source database ($SOURCE_LABEL) is still in READ-ONLY mode ===" >&2
-    echo "The script exited while source was frozen. To unfreeze:" >&2
-    echo "  psql \"postgres://$SOURCE_USER@$SOURCE_HOST:$SOURCE_PORT/$SOURCE_ADMIN_DB\" \\" >&2
-    echo "    -c 'ALTER DATABASE \"$frozen_db\" RESET default_transaction_read_only;'" >&2
+    echo "The script exited while source was frozen. To unfreeze, run this SQL on $SOURCE_LABEL:" >&2
+    echo "  ALTER DATABASE \"$frozen_db\" RESET default_transaction_read_only;" >&2
     echo "=========================================================" >&2
   fi
   return $status
@@ -902,31 +924,38 @@ verify_basic_parity
 step_end
 
 step_start "[11/11] Post-migration cleanup"
-log "Renaming source database (keeping it frozen for safety)..."
-source_admin_url=$(build_url_from_parts "$SOURCE_USER" "$SOURCE_PASS" "$SOURCE_HOST" "$SOURCE_PORT" "$SOURCE_ADMIN_DB" "$SOURCE_SSLMODE")
+if [[ "$RENAME_SOURCE" == "true" ]]; then
+  log "Renaming source database (keeping it frozen for safety)..."
+  source_admin_url=$(build_url_from_parts "$SOURCE_USER" "$SOURCE_PASS" "$SOURCE_HOST" "$SOURCE_PORT" "$SOURCE_ADMIN_DB" "$SOURCE_SSLMODE")
 
-RENAME_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-renamed_name="${DB_NAME}_migrated_${RENAME_TIMESTAMP}"
-actual_frozen_db="$DB_NAME"
-renamed_exists=$(psql "$source_admin_url" -Atqc "SELECT 1 FROM pg_database WHERE datname = '$renamed_name';" 2>/dev/null || true)
-if [[ "$renamed_exists" == "1" ]]; then
-  log "  Warning: Database $renamed_name already exists on source; skipping rename"
-  log "  Original database $DB_NAME remains frozen; unfreeze manually if needed"
+  RENAME_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  renamed_name="${DB_NAME}_migrated_${RENAME_TIMESTAMP}"
   actual_frozen_db="$DB_NAME"
-else
-  # Terminate any active connections to the database before renaming
-  psql "$source_admin_url" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" >/dev/null 2>&1 || true
-  if psql "$source_admin_url" -c "ALTER DATABASE \"$DB_NAME\" RENAME TO \"$renamed_name\";" >/dev/null; then
-    log "  Source database renamed: $DB_NAME → $renamed_name"
-    log "  Database remains in read-only mode as a frozen snapshot"
-    actual_frozen_db="$renamed_name"
-    # Rename successful; clear FROZEN flag since DB is now under a different name
-    FROZEN=0
-  else
-    log "  Warning: Failed to rename source database; manual rename required"
-    log "  Database $DB_NAME remains frozen under original name"
+  renamed_exists=$(psql "$source_admin_url" -Atqc "SELECT 1 FROM pg_database WHERE datname = '$renamed_name';" 2>/dev/null || true)
+  if [[ "$renamed_exists" == "1" ]]; then
+    log "  Warning: Database $renamed_name already exists on source; skipping rename"
+    log "  Original database $DB_NAME remains frozen; unfreeze manually if needed"
     actual_frozen_db="$DB_NAME"
+  else
+    # Terminate any active connections to the database before renaming
+    psql "$source_admin_url" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" >/dev/null 2>&1 || true
+    if psql "$source_admin_url" -c "ALTER DATABASE \"$DB_NAME\" RENAME TO \"$renamed_name\";" >/dev/null; then
+      log "  Source database renamed: $DB_NAME → $renamed_name"
+      log "  Database remains in read-only mode as a frozen snapshot"
+      actual_frozen_db="$renamed_name"
+      # Rename successful; clear FROZEN flag since DB is now under a different name
+      FROZEN=0
+    else
+      log "  Warning: Failed to rename source database; manual rename required"
+      log "  Database $DB_NAME remains frozen under original name"
+      actual_frozen_db="$DB_NAME"
+    fi
   fi
+else
+  log "Skipping source database rename (--rename-source=false)"
+  log "Source database remains as: $DB_NAME (frozen in read-only mode)"
+  log "WARNING: You must manually rename or unfreeze before reusing this database name"
+  actual_frozen_db="$DB_NAME"
 fi
 step_end
 
@@ -934,7 +963,17 @@ TOTAL_ELAPSED=$(($(date +%s) - SCRIPT_START_TIME))
 log ""
 log "=== Migration complete in ${TOTAL_ELAPSED}s ==="
 log "Target ($TARGET_LABEL) database available as: $DB_NAME"
-if [[ "$actual_frozen_db" == "$DB_NAME" ]]; then
+if [[ "$RENAME_SOURCE" == "false" ]]; then
+  log "Source ($SOURCE_LABEL) database kept as: $DB_NAME (frozen in read-only mode)"
+  log "WARNING: Source database name unchanged - manually rename or unfreeze as needed"
+  log ""
+  log "To manually rename the source database later, run these SQL commands on $SOURCE_LABEL:"
+  MANUAL_RENAME_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  manual_renamed_name="${DB_NAME}_migrated_${MANUAL_RENAME_TIMESTAMP}"
+  log "  SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+  log "  ALTER DATABASE \"$DB_NAME\" RENAME TO \"$manual_renamed_name\";"
+  log ""
+elif [[ "$actual_frozen_db" == "$DB_NAME" ]]; then
   log "WARNING: Source ($SOURCE_LABEL) database rename was skipped or failed!"
   log "Source database: $actual_frozen_db (still frozen under original name)"
   log "You must manually rename or unfreeze before running applications."
