@@ -32,13 +32,22 @@ source "${SCRIPT_DIR}/discord-lib.sh"
 HOSTNAME=$(hostname)
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
-DESCRIPTION="**PostgreSQL ${BACKUP_TYPE} Failed**\n\n"
+DESCRIPTION="**${BACKUP_TYPE} Failed**\n\n"
 DESCRIPTION+="**System:** \`${HOSTNAME}\`\n"
 DESCRIPTION+="**Exit Code:** \`${EXIT_CODE}\`\n"
 DESCRIPTION+="**Time:** ${TIMESTAMP}\n\n"
 DESCRIPTION+="**Action Required:** Check logs with:\n"
 DESCRIPTION+="\`\`\`\n"
-DESCRIPTION+="journalctl -u postgres-*-backup.service -n 50\n"
+
+# Adjust log command based on backup type
+if [[ "$BACKUP_TYPE" =~ "Foundry" ]]; then
+    DESCRIPTION+="journalctl -u foundry-backup.service -n 50\n"
+elif [[ "$BACKUP_TYPE" =~ "PostgreSQL" ]] || [[ "$BACKUP_TYPE" =~ "postgres" ]]; then
+    DESCRIPTION+="journalctl -u postgres-*-backup.service -n 50\n"
+else
+    DESCRIPTION+="journalctl -u *backup.service -n 50\n"
+fi
+
 DESCRIPTION+="\`\`\`"
 
 # Send notification using shared function

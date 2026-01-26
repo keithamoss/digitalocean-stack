@@ -1,0 +1,12 @@
+[Unit]
+Description=Foundry VTT Data Backup Timer
+Requires=foundry-backup.service
+
+[Timer]
+# Run at 3:10 AM daily (10 minutes after PostgreSQL backup)
+OnCalendar=*-*-* 03:10:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,30 @@
+[Unit]
+Description=Backup Systems Daily Heartbeat
+Documentation=file://@STACK_DIR@/backups/IMPLEMENTATION_PLAN.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=@STACK_DIR@/backups/monitoring
+
+# Run heartbeat check for all backup systems (PostgreSQL + Foundry)
+ExecStart=@STACK_DIR@/backups/monitoring/backup-status.sh heartbeat
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=backup-heartbeat
+
+# Security
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

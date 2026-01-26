@@ -67,6 +67,40 @@ else
 fi
 cd "$STACK_DIR"
 
+# Early check for restic encryption key (fail fast before installing packages)
+echo "==> Checking for restic encryption key"
+RESTIC_KEY_FILE="$STACK_DIR/backups/secrets/restic.key"
+if [ ! -f "$RESTIC_KEY_FILE" ]; then
+    echo ""
+    echo "⚠️  ERROR: Restic encryption key not found at $RESTIC_KEY_FILE"
+    echo ""
+    echo "For DISASTER RECOVERY (restoring from existing backups):"
+    echo "  1. Restore the key from your password manager to:"
+    echo "     $RESTIC_KEY_FILE"
+    echo "  2. Set permissions: chmod 600 $RESTIC_KEY_FILE"
+    echo "  3. Re-run this setup script"
+    echo ""
+    echo "For NEW INSTALLATION (creating backups for the first time):"
+    echo "  Run: mkdir -p \"$(dirname "$RESTIC_KEY_FILE")\" && openssl rand -base64 32 > \"$RESTIC_KEY_FILE\" && chmod 600 \"$RESTIC_KEY_FILE\""
+    echo "  Then: BACKUP THIS KEY TO YOUR PASSWORD MANAGER!"
+    echo ""
+    exit 1
+fi
+echo "✓ Restic encryption key found at $RESTIC_KEY_FILE"
+
+# Install backup tools
+echo "==> Installing restic for Foundry backups"
+if ! command -v restic >/dev/null 2>&1; then
+    apt install -y restic
+    echo "restic installed: $(restic version)"
+else
+    echo "restic already installed, skipping"
+fi
+
+# Set proper permissions for restic key (already validated above)
+chmod 600 "$RESTIC_KEY_FILE"
+chown "$DOCKER_USER:$DOCKER_USER" "$RESTIC_KEY_FILE"
+
 # Placeholder for secrets
 # TODO: populate /demsausage/secrets/, /nginx/secrets/, /redis/conf/users.acl
 

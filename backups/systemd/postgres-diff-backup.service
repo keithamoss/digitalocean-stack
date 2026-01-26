@@ -8,13 +8,13 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=/home/keith/digitalocean-stack/db
+WorkingDirectory=@STACK_DIR@/db
 
 # Run differential backup (daily)
 ExecStart=/usr/bin/docker exec db /usr/local/bin/pgbackrest-wrapper --stanza=main --type=diff backup
 
 # On failure, send Discord alert
-ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then /home/keith/digitalocean-stack/backups/monitoring/send-failure-alert.sh "Differential Backup" "$EXIT_STATUS"; fi'
+ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Differential Backup" "$EXIT_STATUS"; fi'
 
 # On success, log to journal
 StandardOutput=journal

@@ -1,6 +1,7 @@
 #!/bin/bash
-# PostgreSQL Backup Status Monitor
-# Checks pgBackRest backup status and reports to console/Discord
+# Backup Status Monitor
+# Orchestrates PostgreSQL and Foundry backup status checks
+# Reports to console and Discord
 
 set -euo pipefail
 
@@ -9,16 +10,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUPS_DIR="$(dirname "$SCRIPT_DIR")"
 SECRETS_DIR="${BACKUPS_DIR}/secrets"
 DISCORD_ENV="${SECRETS_DIR}/discord.env"
-DB_CONTAINER="db"
-STANZA="main"
 
 # Load Discord webhook if available
 if [[ -f "$DISCORD_ENV" ]]; then
     source "$DISCORD_ENV"
 fi
 
-# Load shared Discord notification library
+# Load shared libraries
 source "${SCRIPT_DIR}/discord-lib.sh"
+source "${SCRIPT_DIR}/check-postgres-backup.sh"
+source "${SCRIPT_DIR}/check-foundry-backup.sh"
+
+# Set configuration for sub-modules
+export POSTGRES_DB_CONTAINER="db"
+export POSTGRES_STANZA="main"
+export FOUNDRY_RESTIC_REPO="s3:s3.ap-southeast-2.amazonaws.com/jig-ho-cottage-dr/pi-hosting/foundry"
+export FOUNDRY_AWS_ENV="${SECRETS_DIR}/aws.env"
+export FOUNDRY_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 
 # Colors for terminal output
 RED='\033[0;31m'
@@ -41,180 +49,131 @@ format_bytes() {
     fi
 }
 
-# Function to get backup info from pgBackRest
-get_backup_info() {
-    docker exec "$DB_CONTAINER" /usr/local/bin/pgbackrest-wrapper --stanza="$STANZA" --output=json info 2>/dev/null || {
-        echo "ERROR: Failed to retrieve backup info"
-        return 1
-    }
-}
-
-# Function to validate backup system and return info JSON
-validate_backup_system() {
-    # Check container
-    if ! docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
-        echo "ERROR: Container $DB_CONTAINER is not running" >&2
-        return 1
-    fi
-    
-    # Get and validate backup info
-    local info
-    if ! info=$(get_backup_info); then
-        echo "ERROR: Failed to retrieve backup info" >&2
-        return 1
-    fi
-    
-    local backup_count=$(echo "$info" | jq -r '.[0].backup | length')
-    if [[ "$backup_count" == "0" ]] || [[ "$backup_count" == "null" ]]; then
-        echo "ERROR: No backups found" >&2
-        return 1
-    fi
-    
-    echo "$info"
-}
-
-# Function to extract all backup statistics from info JSON
-# Sets global variables with stats for use by main() and heartbeat()
-get_backup_stats() {
-    local info="$1"
-    
-    # Backup counts and basic info
-    BACKUP_COUNT=$(echo "$info" | jq -r '.[0].backup | length')
-    
-    # Latest full backup
-    local last_full=$(echo "$info" | jq -r '[.[0].backup[] | select(.type == "full")] | sort_by(.timestamp.stop) | last')
-    LAST_FULL_TIME=$(echo "$last_full" | jq -r '.timestamp.stop // empty')
-    LAST_FULL_LABEL=$(echo "$last_full" | jq -r '.label // empty')
-    
-    # Latest differential backup
-    local last_diff=$(echo "$info" | jq -r '[.[0].backup[] | select(.type == "diff")] | sort_by(.timestamp.stop) | last')
-    LAST_DIFF_TIME=$(echo "$last_diff" | jq -r '.timestamp.stop // empty')
-    LAST_DIFF_LABEL=$(echo "$last_diff" | jq -r '.label // empty')
-    
-    # Latest backup (any type)
-    local last_backup=$(echo "$info" | jq -r '.[0].backup | sort_by(.timestamp.stop) | last')
-    LAST_BACKUP_TYPE=$(echo "$last_backup" | jq -r '.type')
-    LAST_BACKUP_TIME=$(echo "$last_backup" | jq -r '.timestamp.stop')
-    LAST_BACKUP_SIZE=$(echo "$last_backup" | jq -r '.info.size // 0')
-    LAST_BACKUP_DELTA=$(echo "$last_backup" | jq -r '.info.delta // 0')
-    
-    # PITR range
-    local oldest_backup=$(echo "$info" | jq -r '.[0].backup | sort_by(.timestamp.stop) | first')
-    OLDEST_BACKUP_TIME=$(echo "$oldest_backup" | jq -r '.timestamp.stop')
-    
-    # WAL archive status
-    local wal_max=$(echo "$info" | jq -r '.[0].archive[0].max // empty')
-    if [[ -n "$wal_max" ]] && [[ "$wal_max" != "null" ]]; then
-        WAL_MAX="$wal_max"
-        WAL_STATUS="Active"
-    else
-        WAL_MAX=""
-        WAL_STATUS="Unknown"
-    fi
-    
-    # Backup age
-    local now=$(date +%s)
-    BACKUP_AGE_SECONDS=$((now - LAST_BACKUP_TIME))
-    BACKUP_AGE_HOURS=$((BACKUP_AGE_SECONDS / 3600))
-}
-
 # Main status check - console output
 main() {
-    echo -e "${BLUE}=== PostgreSQL Backup Status ===${NC}\n"
+    echo -e "${BLUE}=== Backup Status ===${NC}\n"
     
-    local info
-    if ! info=$(validate_backup_system); then
-        echo -e "${RED}✗ Backup system validation failed${NC}"
-        send_discord "Backup Status Check Failed" \
-            "Cannot validate backup system.\n\n${info}" \
-            15548997 "🚨"
+    local pg_status=0
+    local foundry_status=0
+    
+    # PostgreSQL Backup Status
+    local pg_info
+    if ! pg_info=$(validate_postgres_backup_system 2>&1); then
+        echo -e "${RED}✗ PostgreSQL backup system validation failed${NC}"
+        echo -e "${RED}${pg_info}${NC}"
+        pg_status=1
+    else
+        if ! display_postgres_status "$pg_info"; then
+            pg_status=1
+        fi
+    fi
+    
+    # Foundry Backup Status
+    if ! display_foundry_status; then
+        foundry_status=1
+    fi
+    
+    # Overall status
+    if ((pg_status == 0)) && ((foundry_status == 0)); then
+        echo -e "\n${GREEN}✓ All backup systems operational${NC}"
+        return 0
+    else
+        echo -e "\n${YELLOW}⚠ Some backup checks have warnings${NC}"
         return 1
     fi
-    
-    echo -e "${GREEN}✓ Container: $DB_CONTAINER is running${NC}"
-    
-    get_backup_stats "$info"
-    
-    echo -e "${GREEN}✓ Total backups: $BACKUP_COUNT${NC}\n"
-    
-    # Display backup information
-    if [[ -n "$LAST_FULL_TIME" ]] && [[ "$LAST_FULL_TIME" != "null" ]]; then
-        echo -e "${GREEN}Last Full Backup:${NC}    $(date -d "@$LAST_FULL_TIME" '+%Y-%m-%d %H:%M:%S') ($LAST_FULL_LABEL)"
-    else
-        echo -e "${YELLOW}Last Full Backup:${NC}    None found"
-    fi
-    
-    if [[ -n "$LAST_DIFF_TIME" ]] && [[ "$LAST_DIFF_TIME" != "null" ]]; then
-        echo -e "${GREEN}Last Differential:${NC}   $(date -d "@$LAST_DIFF_TIME" '+%Y-%m-%d %H:%M:%S') ($LAST_DIFF_LABEL)"
-    else
-        echo -e "${YELLOW}Last Differential:${NC}   None found"
-    fi
-    
-    echo -e "\n${GREEN}Latest Backup:${NC}       $(date -d "@$LAST_BACKUP_TIME" '+%Y-%m-%d %H:%M:%S') (${LAST_BACKUP_TYPE})"
-    echo -e "${GREEN}Backup Size:${NC}         $(format_bytes $LAST_BACKUP_SIZE)"
-    echo -e "${GREEN}Delta Size:${NC}          $(format_bytes $LAST_BACKUP_DELTA)"
-    
-    if [[ -n "$WAL_MAX" ]]; then
-        echo -e "${GREEN}Latest WAL Archive:${NC}  $WAL_MAX"
-    else
-        echo -e "${YELLOW}WAL Archive:${NC}         Status unknown"
-    fi
-    
-    echo -e "\n${GREEN}PITR Recovery Range:${NC}"
-    echo -e "  From: $(date -d "@$OLDEST_BACKUP_TIME" '+%Y-%m-%d %H:%M:%S')"
-    echo -e "  To:   $(date -d "@$LAST_BACKUP_TIME" '+%Y-%m-%d %H:%M:%S')"
-    
-    echo -e "\n${GREEN}S3 Repository:${NC}       OK (stanza: $STANZA)"
-    
-    if ((BACKUP_AGE_HOURS > 36)); then
-        echo -e "\n${YELLOW}⚠ Warning: Last backup is ${BACKUP_AGE_HOURS} hours old${NC}"
-        return 1
-    fi
-    
-    echo -e "\n${GREEN}✓ Backup system operational${NC}"
-    return 0
 }
 
 # Daily heartbeat function - Discord notification
 heartbeat() {
     echo "Sending daily backup heartbeat to Discord..."
     
-    local info
-    if ! info=$(validate_backup_system 2>&1); then
+    # Check PostgreSQL backups
+    local pg_info
+    if ! pg_info=$(validate_postgres_backup_system 2>&1); then
         send_discord "Daily Heartbeat: System Check Failed" \
-            "Backup system validation failed.\n\n**Error:** ${info}\n\n**Action Required:** Check backup system." \
+            "PostgreSQL backup system validation failed.\n\n**Error:** ${pg_info}\n\n**Action Required:** Check backup system." \
             15548997 "🚨"
         return 1
     fi
     
-    get_backup_stats "$info"
+    get_postgres_backup_stats "$pg_info"
     
-    # Format data for Discord
-    local formatted_time=$(date -d "@$LAST_BACKUP_TIME" '+%Y-%m-%d %H:%M:%S')
-    local formatted_size=$(format_bytes $LAST_BACKUP_SIZE)
-    local pitr_from=$(date -d "@$OLDEST_BACKUP_TIME" '+%Y-%m-%d %H:%M')
-    local pitr_to=$(date -d "@$LAST_BACKUP_TIME" '+%Y-%m-%d %H:%M')
-    
-    # Build status message
-    local status_msg="**PostgreSQL Backup Status**\n\n"
-    status_msg+="✓ System: \`pi-hosting\`\n"
-    status_msg+="✓ Total backups: \`${BACKUP_COUNT}\`\n"
-    
-    if ((BACKUP_AGE_HOURS > 36)); then
-        status_msg+="⚠ Last backup: \`${formatted_time}\` (**${BACKUP_AGE_HOURS}h ago**)\n"
-    else
-        status_msg+="✓ Last backup: \`${formatted_time}\` (${BACKUP_AGE_HOURS}h ago)\n"
+    # Check Foundry backups
+    local foundry_status=0
+    if ! check_foundry_backup >/dev/null 2>&1; then
+        foundry_status=1
     fi
     
-    status_msg+="✓ Type: \`${LAST_BACKUP_TYPE}\`\n"
-    status_msg+="✓ Size: \`${formatted_size}\`\n"
-    status_msg+="✓ PITR Range: \`${pitr_from}\` → \`${pitr_to}\`\n"
-    status_msg+="✓ WAL Archive: ${WAL_STATUS}\n"
-    status_msg+="✓ S3 Repo: Operational"
+    # Format data for Discord
+    local formatted_time=$(date -d "@$PG_LAST_BACKUP_TIME" '+%Y-%m-%d %H:%M:%S')
+    local formatted_size=$(format_bytes $PG_LAST_BACKUP_SIZE)
+    local pitr_from=$(date -d "@$PG_OLDEST_BACKUP_TIME" '+%Y-%m-%d %H:%M')
+    local pitr_to=$(date -d "@$PG_PITR_END_TIME" '+%Y-%m-%d %H:%M')
     
-    if ((BACKUP_AGE_HOURS > 36)); then
-        status_msg+="\n\n**Warning:** Last backup is older than 36 hours."
-        send_discord "Daily Heartbeat: Backup Stale" "$status_msg" 16776960 "⚠️"
+    # Calculate if PITR extends beyond backup
+    local pitr_extra=""
+    if [[ "$PG_PITR_END_TIME" -gt "$PG_LAST_BACKUP_TIME" ]]; then
+        local extra_minutes=$(( (PG_PITR_END_TIME - PG_LAST_BACKUP_TIME) / 60 ))
+        pitr_extra=" (+${extra_minutes}m via WAL)"
+    fi
+    
+    # Build status message
+    local status_msg="**Backup Status Report**\n\n"
+    status_msg+="**PostgreSQL (pgBackRest)**\n"
+    status_msg+="✓ System: \`pi-hosting\`\n"
+    status_msg+="✓ Total backups: \`${PG_BACKUP_COUNT}\`\n"
+    
+    if ((PG_BACKUP_AGE_HOURS > 36)); then
+        status_msg+="⚠ Last backup: \`${formatted_time}\` (**${PG_BACKUP_AGE_HOURS}h ago**)\n"
+    else
+        status_msg+="✓ Last backup: \`${formatted_time}\` (${PG_BACKUP_AGE_HOURS}h ago)\n"
+    fi
+    
+    status_msg+="✓ Type: \`${PG_LAST_BACKUP_TYPE}\`\n"
+    status_msg+="✓ Size: \`${formatted_size}\`\n"
+    status_msg+="✓ PITR Range: \`${pitr_from}\` → \`${pitr_to}\`${pitr_extra}\n"
+    
+    # WAL Archive health with failure tracking
+    local wal_health_icon="✓"
+    local wal_health_msg="${PG_WAL_STATUS}"
+    
+    if [[ -n "${PG_WAL_FAILURE_RATE:-}" ]]; then
+        wal_health_msg+=", Failures: \`${PG_WAL_FAILED_COUNT}/${PG_WAL_ARCHIVED_COUNT}\` (${PG_WAL_FAILURE_RATE}%)"
+        
+        # Warn if failure rate > 10% and had failures in last 24h
+        if (( $(awk "BEGIN {print ($PG_WAL_FAILURE_RATE > 10)}") )) && (( PG_WAL_LAST_FAILED_AGE < 86400 )); then
+            wal_health_icon="⚠"
+            local failed_hours=$((PG_WAL_LAST_FAILED_AGE / 3600))
+            wal_health_msg+="\n⚠ Recent failures detected (${failed_hours}h ago)"
+        fi
+    fi
+    
+    status_msg+="${wal_health_icon} WAL Archive: ${wal_health_msg}\n"
+    
+    # Add Foundry status
+    status_msg+="\n**Foundry VTT (restic)**\n"
+    if ((foundry_status == 0)); then
+        local foundry_time=$(date -d "@${FOUNDRY_SNAPSHOT_TIME}" '+%Y-%m-%d %H:%M:%S')
+        local foundry_files=$(printf "%'d" $FOUNDRY_SNAPSHOT_SIZE)
+        status_msg+="${FOUNDRY_STATUS_EMOJI} Status: \`${FOUNDRY_STATUS}\`\n"
+        status_msg+="✓ Last backup: \`${foundry_time}\` (${FOUNDRY_AGE_HOURS}h ago)\n"
+        status_msg+="✓ Files: \`${foundry_files}\`\n"
+    else
+        status_msg+="✗ Status: \`Failed\`\n"
+    fi
+    
+    status_msg+="\n**Storage**\n"
+    status_msg+="✓ S3 Repos: Operational"
+    
+    # Determine overall status and send appropriate notification
+    if ((PG_BACKUP_AGE_HOURS > 36)) || ((foundry_status != 0)); then
+        if ((PG_BACKUP_AGE_HOURS > 36)); then
+            status_msg+="\n\n**Warning:** PostgreSQL backup is older than 36 hours."
+        fi
+        if ((foundry_status != 0)); then
+            status_msg+="\n\n**Warning:** Foundry backup check failed."
+        fi
+        send_discord "Daily Heartbeat: Issues Detected" "$status_msg" 16776960 "⚠️"
         return 1
     else
         status_msg+="\n\nAll systems nominal."

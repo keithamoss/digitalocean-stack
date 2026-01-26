@@ -10,7 +10,16 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SYSTEMD_DIR="/etc/systemd/system"
 
-echo "Installing pgBackRest backup systemd units..."
+# Auto-detect stack directory (go up two levels from systemd/)
+STACK_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# Auto-detect stack user (owner of the stack directory)
+STACK_USER=$(stat -c '%U' "$STACK_DIR")
+
+echo "Installing backup systemd units..."
+echo "  Stack directory: $STACK_DIR"
+echo "  Stack user: $STACK_USER"
+echo ""
 
 # Check if running as root or with sudo
 if [ "$EUID" -ne 0 ]; then
@@ -18,23 +27,28 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Copy service and timer files
-echo "Copying service files..."
-cp "${SCRIPT_DIR}/postgres-diff-backup.service" "${SYSTEMD_DIR}/"
-cp "${SCRIPT_DIR}/postgres-diff-backup.timer" "${SYSTEMD_DIR}/"
-cp "${SCRIPT_DIR}/postgres-full-backup.service" "${SYSTEMD_DIR}/"
-cp "${SCRIPT_DIR}/postgres-full-backup.timer" "${SYSTEMD_DIR}/"
-cp "${SCRIPT_DIR}/postgres-backup-heartbeat.service" "${SYSTEMD_DIR}/"
-cp "${SCRIPT_DIR}/postgres-backup-heartbeat.timer" "${SYSTEMD_DIR}/"
+# Function to install service/timer with substitution
+install_unit() {
+    local src_file="$1"
+    local dest_file="$2"
+    
+    echo "  Installing $(basename "$dest_file")..."
+    sed -e "s|@STACK_DIR@|${STACK_DIR}|g" \
+        -e "s|@STACK_USER@|${STACK_USER}|g" \
+        "$src_file" > "$dest_file"
+    chmod 644 "$dest_file"
+}
 
-# Set proper permissions
-echo "Setting permissions..."
-chmod 644 "${SYSTEMD_DIR}/postgres-diff-backup.service"
-chmod 644 "${SYSTEMD_DIR}/postgres-diff-backup.timer"
-chmod 644 "${SYSTEMD_DIR}/postgres-full-backup.service"
-chmod 644 "${SYSTEMD_DIR}/postgres-full-backup.timer"
-chmod 644 "${SYSTEMD_DIR}/postgres-backup-heartbeat.service"
-chmod 644 "${SYSTEMD_DIR}/postgres-backup-heartbeat.timer"
+# Install service and timer files
+echo "Copying and configuring service files..."
+install_unit "${SCRIPT_DIR}/postgres-diff-backup.service" "${SYSTEMD_DIR}/postgres-diff-backup.service"
+install_unit "${SCRIPT_DIR}/postgres-diff-backup.timer" "${SYSTEMD_DIR}/postgres-diff-backup.timer"
+install_unit "${SCRIPT_DIR}/postgres-full-backup.service" "${SYSTEMD_DIR}/postgres-full-backup.service"
+install_unit "${SCRIPT_DIR}/postgres-full-backup.timer" "${SYSTEMD_DIR}/postgres-full-backup.timer"
+install_unit "${SCRIPT_DIR}/backup-heartbeat.service" "${SYSTEMD_DIR}/backup-heartbeat.service"
+install_unit "${SCRIPT_DIR}/backup-heartbeat.timer" "${SYSTEMD_DIR}/backup-heartbeat.timer"
+install_unit "${SCRIPT_DIR}/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
+install_unit "${SCRIPT_DIR}/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
 
 # Reload systemd
 echo "Reloading systemd daemon..."
@@ -44,20 +58,26 @@ systemctl daemon-reload
 echo "Enabling timers..."
 systemctl enable postgres-diff-backup.timer
 systemctl enable postgres-full-backup.timer
-systemctl enable postgres-backup-heartbeat.timer
+systemctl enable backup-heartbeat.timer
 
 echo ""
 echo "✓ Installation complete!"
 echo ""
+echo "Stack configuration:"
+echo "  Directory: $STACK_DIR"
+echo "  User: $STACK_USER"
+echo ""
 echo "Backup schedule:"
 echo "  - Differential backup: Daily at 3:00 AM"
 echo "  - Full backup: Weekly on Sunday at 3:00 AM"
+echo "  - Foundry backup: Daily at 3:10 AM"
 echo "  - Daily heartbeat: Daily at 3:30 AM"
 echo ""
 echo "To start the timers now:"
 echo "  sudo systemctl start postgres-diff-backup.timer"
 echo "  sudo systemctl start postgres-full-backup.timer"
-echo "  sudo systemctl start postgres-backup-heartbeat.timer"
+echo "  sudo systemctl start foundry-backup.timer"
+echo "  sudo systemctl start backup-heartbeat.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers postgres-*"
