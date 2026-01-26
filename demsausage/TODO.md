@@ -1,3 +1,7 @@
+# Why do we have a logs/ dir here and a ../logs dir up there? Standardise on using one pattern
+
+# The secrets here need to be named specific for staging
+
 # Check screenshot generation works...
 In the absence of this bit of config: https://github.com/keithamoss/demsausage/blob/d7e6b531ca6b31bd4fcf3a888cb5b967dcff51b9/docker-compose.yml#L135
 
