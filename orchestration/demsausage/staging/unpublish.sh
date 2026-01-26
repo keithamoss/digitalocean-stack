@@ -4,8 +4,8 @@
 set -euo pipefail
 
 echo "==> Checking privileges"
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script with sudo/root." >&2
+if [ "$EUID" -eq 0 ]; then
+    echo "This script should not be run as root/sudo. Run as a regular user with docker group access." >&2
     exit 1
 fi
 

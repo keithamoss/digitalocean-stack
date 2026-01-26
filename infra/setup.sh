@@ -45,6 +45,12 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 systemctl is-active --quiet docker || systemctl start docker
 docker --version
 
+# Add non-root user to docker group
+DOCKER_USER="keith"
+echo "==> Adding $DOCKER_USER to docker group"
+usermod -aG docker "$DOCKER_USER"
+echo "User $DOCKER_USER added to docker group. They will need to log out and back in for changes to take effect."
+
 declare -r STACK_DIR=${STACK_DIR:-/apps/stack}
 declare -r CERT_DIR=${CERT_DIR:-$STACK_DIR/nginx/certs}
 
@@ -64,28 +70,13 @@ cd "$STACK_DIR"
 # Placeholder for secrets
 # TODO: populate /demsausage/secrets/, /nginx/secrets/, /redis/conf/users.acl
 
-# Let's Encrypt via acme.sh (Cloudflare DNS-01)
-# - Requires CF_Token (Cloudflare Zone:DNS:Edit) exported before running.
-# - Installs acme.sh as root and issues staging certs into nginx/certs.
-
-mkdir -p "$CERT_DIR"
-
-if [ -z "${CF_Token:-}" ]; then
-    echo "CF_Token not set; skipping ACME issuance. Export CF_Token and rerun the ACME block." >&2
+# Install acme.sh for Let's Encrypt certificate management
+# - Certificate issuance is handled by individual site publish scripts
+# - Installing as DOCKER_USER to avoid sudo/permission issues
+echo "==> Installing acme.sh as $DOCKER_USER"
+if [ ! -d "/home/$DOCKER_USER/.acme.sh" ]; then
+    su - "$DOCKER_USER" -c 'curl https://get.acme.sh | sh'
+    su - "$DOCKER_USER" -c '~/.acme.sh/acme.sh --version'
 else
-    echo "==> Installing acme.sh"
-    curl https://get.acme.sh | sh
-    ~/.acme.sh/acme.sh --version
-
-    echo "==> Issuing staging certs via Cloudflare DNS-01"
-    CF_Token=$CF_Token ~/.acme.sh/acme.sh --issue --dns dns_cf --server letsencrypt \
-        -d staging.democracysausage.org \
-        -d staging-admin.democracysausage.org \
-        -d staging-rq.democracysausage.org \
-        --keylength ec-256
-
-    echo "==> Installing certs into $CERT_DIR"
-    CF_Token=$CF_Token ~/.acme.sh/acme.sh --install-cert -d staging.democracysausage.org --ecc \
-        --key-file $CERT_DIR/democracysausage.org.key \
-        --fullchain-file $CERT_DIR/democracysausage.org.fullchain.pem
+    echo "acme.sh already installed for $DOCKER_USER, skipping"
 fi
