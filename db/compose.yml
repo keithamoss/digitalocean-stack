@@ -6,7 +6,10 @@ networks:
 services:
   db:
     container_name: db
-    image: ghcr.io/baosystems/postgis:15-3.3
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: keithmoss/postgres-pgbackrest:15
     restart: always
     command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
     ports:
@@ -17,23 +20,18 @@ services:
       - secrets/db.env
     volumes:
       - ./data:/var/lib/postgresql/data
-      - ./logs:/etc/postgresql/pg_log
-
+      - ./logs/postgresql:/etc/postgresql/pg_log
       # Enable this mapping to inject the tweaked postgresql.conf file into our PostgreSQL container.
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      # Enable this mapping and create ./dev/pg_log/ to get easier access to PostgreSQL's log files for debugging.
-      # - ./dev/pg_log/:/var/lib/postgresql/data/pg_log/
-      # pgbackups3-prod:
-      #   image: eeshugerman/postgres-backup-s3:15
-      #   restart: always
-      #   env_file:
-      #     - secrets/pgbackups3-prod.env
-      #   depends_on:
-      #     - db
-      # pgbackups3-staging:
-      #   image: eeshugerman/postgres-backup-s3:15
-      #   restart: always
-      #   env_file:
-      #     - secrets/pgbackups3-staging.env
-      #   depends_on:
-      #     - db
+      # Mount pgBackRest log directory for easier access
+      - ./logs/pgbackrest:/var/log/pgbackrest
+      # Credential wrapper for pgBackRest (loads AWS keys before executing)
+      - ./pgbackrest-wrapper.sh:/usr/local/bin/pgbackrest-wrapper:ro
+    secrets:
+      # AWS credentials for pgBackRest S3 backups
+      # Loaded by pgbackrest-wrapper-container.sh before executing backups/restores
+      - aws.env
+
+secrets:
+  aws.env:
+    file: ../backups/secrets/aws.env

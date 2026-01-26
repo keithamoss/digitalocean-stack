@@ -4,7 +4,7 @@
 
 The lazy "Eh, just dump everything and reload it rather than trying to upgrade it" approach.
 
-1. Navigate to the shared logs directory `/etc/postgresql/pg_log`
+1. Navigate to the shared logs directory `logs/postgresql`
 2. Make it read-only with `ALTER DATABASE dbname SET default_transaction_read_only=on;`
 3. Dump the current database with `pg_dumpall -U postgres > dumpfile`
 4. Stop the old container
