@@ -1,0 +1,15 @@
+[Unit]
+Description=PostgreSQL Backup Daily Heartbeat Timer
+Documentation=file:///home/keith/digitalocean-stack/backups/IMPLEMENTATION_PLAN.md
+Requires=postgres-backup-heartbeat.service
+
+[Timer]
+# Run daily at 3:30 AM (30 minutes after backup completion)
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+# Allow some jitter to avoid conflicts
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

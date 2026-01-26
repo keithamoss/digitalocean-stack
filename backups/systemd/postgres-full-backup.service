@@ -13,6 +13,9 @@ WorkingDirectory=/home/keith/digitalocean-stack/db
 # Run FULL backup (weekly)
 ExecStart=/usr/bin/docker exec db /usr/local/bin/pgbackrest-wrapper --stanza=main --type=full backup
 
+# On failure, send Discord alert
+ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then /home/keith/digitalocean-stack/backups/monitoring/send-failure-alert.sh "Full Backup" "$EXIT_STATUS"; fi'
+
 # On success, log to journal
 StandardOutput=journal
 StandardError=journal

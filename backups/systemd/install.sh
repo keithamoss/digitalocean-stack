@@ -24,6 +24,8 @@ cp "${SCRIPT_DIR}/postgres-diff-backup.service" "${SYSTEMD_DIR}/"
 cp "${SCRIPT_DIR}/postgres-diff-backup.timer" "${SYSTEMD_DIR}/"
 cp "${SCRIPT_DIR}/postgres-full-backup.service" "${SYSTEMD_DIR}/"
 cp "${SCRIPT_DIR}/postgres-full-backup.timer" "${SYSTEMD_DIR}/"
+cp "${SCRIPT_DIR}/postgres-backup-heartbeat.service" "${SYSTEMD_DIR}/"
+cp "${SCRIPT_DIR}/postgres-backup-heartbeat.timer" "${SYSTEMD_DIR}/"
 
 # Set proper permissions
 echo "Setting permissions..."
@@ -31,6 +33,8 @@ chmod 644 "${SYSTEMD_DIR}/postgres-diff-backup.service"
 chmod 644 "${SYSTEMD_DIR}/postgres-diff-backup.timer"
 chmod 644 "${SYSTEMD_DIR}/postgres-full-backup.service"
 chmod 644 "${SYSTEMD_DIR}/postgres-full-backup.timer"
+chmod 644 "${SYSTEMD_DIR}/postgres-backup-heartbeat.service"
+chmod 644 "${SYSTEMD_DIR}/postgres-backup-heartbeat.timer"
 
 # Reload systemd
 echo "Reloading systemd daemon..."
@@ -40,6 +44,7 @@ systemctl daemon-reload
 echo "Enabling timers..."
 systemctl enable postgres-diff-backup.timer
 systemctl enable postgres-full-backup.timer
+systemctl enable postgres-backup-heartbeat.timer
 
 echo ""
 echo "✓ Installation complete!"
@@ -47,10 +52,12 @@ echo ""
 echo "Backup schedule:"
 echo "  - Differential backup: Daily at 3:00 AM"
 echo "  - Full backup: Weekly on Sunday at 3:00 AM"
+echo "  - Daily heartbeat: Daily at 3:30 AM"
 echo ""
 echo "To start the timers now:"
 echo "  sudo systemctl start postgres-diff-backup.timer"
 echo "  sudo systemctl start postgres-full-backup.timer"
+echo "  sudo systemctl start postgres-backup-heartbeat.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers postgres-*"

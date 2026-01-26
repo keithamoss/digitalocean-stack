@@ -1,0 +1,29 @@
+[Unit]
+Description=PostgreSQL Backup Daily Heartbeat
+Documentation=file:///home/keith/digitalocean-stack/backups/IMPLEMENTATION_PLAN.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/keith/digitalocean-stack/backups/monitoring
+
+# Run heartbeat check
+ExecStart=/home/keith/digitalocean-stack/backups/monitoring/backup-status.sh heartbeat
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=postgres-backup-heartbeat
+
+# Security
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/home/keith/digitalocean-stack
+
+[Install]
+WantedBy=multi-user.target
