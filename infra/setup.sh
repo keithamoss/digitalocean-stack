@@ -125,6 +125,13 @@ for dir in "${SECRETS_DIRS[@]}"; do
     fi
 done
 
+# Exception: backups/secrets/aws.env needs to be readable (644) so postgres user
+# in the database container can read it via Docker secret mount for WAL archiving
+if [ -f "$STACK_DIR/backups/secrets/aws.env" ]; then
+    chmod 644 "$STACK_DIR/backups/secrets/aws.env"
+    echo "  ⓘ backups/secrets/aws.env set to 644 (readable by postgres for WAL archiving)"
+fi
+
 # Secure Redis users.acl if it exists
 if [ -f "$STACK_DIR/redis/conf/users.acl" ]; then
     chmod 600 "$STACK_DIR/redis/conf/users.acl"
