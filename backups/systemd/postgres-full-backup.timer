@@ -1,0 +1,17 @@
+[Unit]
+Description=PostgreSQL Full Backup Timer (Weekly on Sunday at 3 AM)
+Documentation=https://pgbackrest.org/
+Requires=postgres-full-backup.service
+
+[Timer]
+# Run weekly on Sunday at 3:00 AM
+OnCalendar=Sun *-*-* 03:00:00
+
+# If system was off, run backup on next boot
+Persistent=true
+
+# Randomize by 15 minutes to avoid load spikes
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

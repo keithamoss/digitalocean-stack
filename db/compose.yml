@@ -23,6 +23,8 @@ services:
       - ./logs/postgresql:/etc/postgresql/pg_log
       # Enable this mapping to inject the tweaked postgresql.conf file into our PostgreSQL container.
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      # pgBackRest configuration (mounted for easy tuning without rebuilds)
+      - ./pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       # Mount pgBackRest log directory for easier access
       - ./logs/pgbackrest:/var/log/pgbackrest
       # Credential wrapper for pgBackRest (loads AWS keys before executing)
