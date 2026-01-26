@@ -101,6 +101,37 @@ fi
 chmod 600 "$RESTIC_KEY_FILE"
 chown "$DOCKER_USER:$DOCKER_USER" "$RESTIC_KEY_FILE"
 
+# Secure all secret files across repository
+echo "==> Securing secret files across repository"
+SECRETS_DIRS=(
+    "$STACK_DIR/backups/secrets"      # Backup AWS, Discord, restic keys
+    "$STACK_DIR/db/secrets"            # Database credentials
+    "$STACK_DIR/demsausage/secrets"    # Demsausage app secrets
+    "$STACK_DIR/foundry/secrets"       # Foundry VTT secrets
+    "$STACK_DIR/nginx/secrets"         # Nginx/SSL secrets
+    "$STACK_DIR/orchestration/secrets" # Orchestration secrets
+    "$STACK_DIR/secrets"               # Root-level secrets
+    # Note: secrets-tmpl/ intentionally excluded (templates)
+)
+
+for dir in "${SECRETS_DIRS[@]}"; do
+    if [ -d "$dir" ]; then
+        # Find all .env and .key files, excluding README and .gitkeep
+        find "$dir" -maxdepth 1 -type f \( -name "*.env" -o -name "*.key" \) ! -name "README*" ! -name ".gitkeep" -print0 | while IFS= read -r -d '' file; do
+            chmod 600 "$file"
+            chown "$DOCKER_USER:$DOCKER_USER" "$file"
+        done
+        echo "  ✓ Secured secrets in $dir"
+    fi
+done
+
+# Secure Redis users.acl if it exists
+if [ -f "$STACK_DIR/redis/conf/users.acl" ]; then
+    chmod 600 "$STACK_DIR/redis/conf/users.acl"
+    chown "$DOCKER_USER:$DOCKER_USER" "$STACK_DIR/redis/conf/users.acl"
+    echo "  ✓ Secured redis/conf/users.acl"
+fi
+
 # Placeholder for secrets
 # TODO: populate /demsausage/secrets/, /nginx/secrets/, /redis/conf/users.acl
 

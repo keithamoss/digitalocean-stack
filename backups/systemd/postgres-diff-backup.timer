@@ -4,8 +4,8 @@ Documentation=https://pgbackrest.org/
 Requires=postgres-diff-backup.service
 
 [Timer]
-# Run daily at 3:00 AM
-OnCalendar=*-*-* 03:00:00
+# Run daily at 3:00 AM (Monday through Saturday; Sunday runs full backup instead)
+OnCalendar=Mon,Tue,Wed,Thu,Fri,Sat *-*-* 03:00:00
 
 # If system was off, run backup on next boot
 Persistent=true
