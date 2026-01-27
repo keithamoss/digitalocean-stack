@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=oneshot
 User=@STACK_USER@
 Group=@STACK_USER@
-WorkingDirectory=@STACK_DIR@/backups
-ExecStart=@STACK_DIR@/backups/foundry-backup-wrapper.sh
+WorkingDirectory=@STACK_DIR@/backups/foundry
+ExecStart=@STACK_DIR@/backups/foundry/backup-wrapper.sh
 ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Foundry Backup" $EXIT_STATUS; fi'
 
 # Environment

@@ -10,8 +10,8 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SYSTEMD_DIR="/etc/systemd/system"
 
-# Auto-detect stack directory (go up two levels from systemd/)
-STACK_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
+# Stack directory is the parent of backups/
+STACK_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 # Auto-detect stack user (owner of the stack directory)
 STACK_USER=$(stat -c '%U' "$STACK_DIR")
@@ -41,14 +41,14 @@ install_unit() {
 
 # Install service and timer files
 echo "Copying and configuring service files..."
-install_unit "${SCRIPT_DIR}/postgres-diff-backup.service" "${SYSTEMD_DIR}/postgres-diff-backup.service"
-install_unit "${SCRIPT_DIR}/postgres-diff-backup.timer" "${SYSTEMD_DIR}/postgres-diff-backup.timer"
-install_unit "${SCRIPT_DIR}/postgres-full-backup.service" "${SYSTEMD_DIR}/postgres-full-backup.service"
-install_unit "${SCRIPT_DIR}/postgres-full-backup.timer" "${SYSTEMD_DIR}/postgres-full-backup.timer"
-install_unit "${SCRIPT_DIR}/backup-heartbeat.service" "${SYSTEMD_DIR}/backup-heartbeat.service"
-install_unit "${SCRIPT_DIR}/backup-heartbeat.timer" "${SYSTEMD_DIR}/backup-heartbeat.timer"
-install_unit "${SCRIPT_DIR}/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
-install_unit "${SCRIPT_DIR}/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
+install_unit "${SCRIPT_DIR}/postgres/diff/postgres-diff-backup.service" "${SYSTEMD_DIR}/postgres-diff-backup.service"
+install_unit "${SCRIPT_DIR}/postgres/diff/postgres-diff-backup.timer" "${SYSTEMD_DIR}/postgres-diff-backup.timer"
+install_unit "${SCRIPT_DIR}/postgres/full/postgres-full-backup.service" "${SYSTEMD_DIR}/postgres-full-backup.service"
+install_unit "${SCRIPT_DIR}/postgres/full/postgres-full-backup.timer" "${SYSTEMD_DIR}/postgres-full-backup.timer"
+install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.service" "${SYSTEMD_DIR}/backup-heartbeat.service"
+install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.timer" "${SYSTEMD_DIR}/backup-heartbeat.timer"
+install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
+install_unit "${SCRIPT_DIR}/foundry/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
 
 # Reload systemd
 echo "Reloading systemd daemon..."

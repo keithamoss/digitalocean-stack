@@ -8,10 +8,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=@STACK_DIR@/backups
+WorkingDirectory=@STACK_DIR@/backups/postgres/full
 
 # Run FULL backup (weekly) via wrapper script
-ExecStart=@STACK_DIR@/backups/postgres-full-backup.sh
+ExecStart=@STACK_DIR@/backups/postgres/full/full-backup.sh
 
 # On failure, send Discord alert
 ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Full Backup" "$EXIT_STATUS"; fi'

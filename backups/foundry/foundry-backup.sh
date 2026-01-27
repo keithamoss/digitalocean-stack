@@ -35,13 +35,8 @@ RESTIC_REPO="s3:s3.${AWS_DEFAULT_REGION}.amazonaws.com/${S3_BUCKET}/pi-hosting/f
 FOUNDRY_DATA_DIR="$REPO_ROOT/foundry/data"
 BACKUP_PATHS=("$FOUNDRY_DATA_DIR/Data" "$FOUNDRY_DATA_DIR/Config")
 
-# Logging
-LOG_DIR="$REPO_ROOT/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/foundry-backup-$(date +%Y%m%d-%H%M%S).log"
-
-# Redirect output to log file and stdout
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Logging - now handled by wrapper script, just output to stdout/stderr
+# The foundry-backup-wrapper.sh will capture and log everything
 
 echo "=========================================="
 echo "Foundry VTT Backup - $(date)"

@@ -8,10 +8,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=@STACK_DIR@/backups
+WorkingDirectory=@STACK_DIR@/backups/postgres/diff
 
 # Run differential backup (daily) via wrapper script
-ExecStart=@STACK_DIR@/backups/postgres-diff-backup.sh
+ExecStart=@STACK_DIR@/backups/postgres/diff/diff-backup.sh
 
 # On failure, send Discord alert
 ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Differential Backup" "$EXIT_STATUS"; fi'

@@ -8,10 +8,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=@STACK_DIR@/backups
+WorkingDirectory=@STACK_DIR@/backups/monitoring/heartbeat
 
 # Run heartbeat check for all backup systems (PostgreSQL + Foundry) via wrapper script
-ExecStart=@STACK_DIR@/backups/heartbeat-wrapper.sh
+ExecStart=@STACK_DIR@/backups/monitoring/heartbeat/heartbeat-wrapper.sh
 
 # Logging
 StandardOutput=journal

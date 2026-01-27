@@ -7,7 +7,8 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUPS_DIR="$(dirname "$SCRIPT_DIR")"
+MONITORING_DIR="$(dirname "$SCRIPT_DIR")"
+BACKUPS_DIR="$(dirname "$MONITORING_DIR")"
 SECRETS_DIR="${BACKUPS_DIR}/secrets"
 DISCORD_ENV="${SECRETS_DIR}/discord.env"
 
