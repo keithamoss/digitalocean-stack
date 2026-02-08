@@ -4,37 +4,47 @@ Documentation=https://pgbackrest.org/
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=backup-failure-alert@postgres-diff-backup.service
 
 [Service]
 Type=oneshot
+# Run as root to execute docker commands and access pgBackRest container
 User=root
-WorkingDirectory=@STACK_DIR@/backups/postgres/diff
+WorkingDirectory=@STACK_DIR@/backups/postgres
 
-# Run differential backup (daily) via wrapper script
-ExecStart=@STACK_DIR@/backups/postgres/diff/diff-backup.sh
+# Container configuration (can be overridden)
+Environment="POSTGRES_DB_CONTAINER=db"
+Environment="POSTGRES_STANZA=main"
 
-# On failure, send Discord alert
-ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Differential Backup" "$EXIT_STATUS"; fi'
+# Run differential backup (daily) via consolidated wrapper script
+ExecStart=@STACK_DIR@/backups/postgres/postgres-backup.sh diff
 
-# On success, log to journal
+# Timeout after 1 hour (differential backups should be faster)
+TimeoutStartSec=3600
+
+# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=postgres-diff-backup
 
 # Restart policy
-Restart=on-failure
-RestartSec=5m
+Restart=no
 
 # Resource limits
+# Differential backups run daily at 3 AM (Mon-Sat) and are smaller/faster
+# Nice=19: Lowest priority to minimize impact on other processes
+# CPUQuota=50%: Limit CPU to half to preserve resources for other tasks
+# IOSchedulingClass=idle: Only use I/O when system is idle
 Nice=19
 IOSchedulingClass=idle
 CPUQuota=50%
 
-# Security
+# Security hardening
 PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/backups/logs/postgres-diff
 
 [Install]
 WantedBy=multi-user.target

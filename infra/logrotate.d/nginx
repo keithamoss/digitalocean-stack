@@ -1,0 +1,20 @@
+# Log rotation for nginx running in digitalocean-stack
+# Logs located at /home/keith/digitalocean-stack/logs/nginx/
+# Format: access-YYYY.MM.DD.log, error-YYYY.MM.DD.log
+
+/home/keith/digitalocean-stack/logs/nginx/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+    sharedscripts
+    postrotate
+        # Send USR1 signal to nginx container to reopen log files
+        docker exec nginx nginx -s reopen 2>/dev/null || true
+    endscript
+}

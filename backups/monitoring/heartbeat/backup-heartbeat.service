@@ -4,27 +4,41 @@ Documentation=file://@STACK_DIR@/backups/IMPLEMENTATION_PLAN.md
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=backup-failure-alert@backup-heartbeat.service
 
 [Service]
 Type=oneshot
+# Run as root to access Docker containers and check backup status across all systems
 User=root
 WorkingDirectory=@STACK_DIR@/backups/monitoring/heartbeat
 
-# Run heartbeat check for all backup systems (PostgreSQL + Foundry) via wrapper script
+# Run heartbeat check for all backup systems (PostgreSQL + Foundry)
 ExecStart=@STACK_DIR@/backups/monitoring/heartbeat/heartbeat-wrapper.sh
+
+# Environment
+Environment="HOME=/root"
+
+# Timeout after 5 minutes (heartbeat should be quick)
+TimeoutStartSec=300
 
 # Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=backup-heartbeat
 
-# Security
-PrivateTmp=yes
-NoNewPrivileges=yes
+# Restart policy
+Restart=no
 
 # Resource limits
 MemoryMax=512M
 CPUQuota=25%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/@STACK_USER@/.cache/restic @STACK_DIR@/backups
 
 [Install]
 WantedBy=multi-user.target

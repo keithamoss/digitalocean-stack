@@ -5,35 +5,28 @@
 
 set -euo pipefail
 
-# Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUPS_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Determine script and backup directories using realpath (Issue 4)
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+BACKUPS_DIR="$(realpath "$SCRIPT_DIR/../..")"
+
+# Load shared wrapper library (Issue 1)
+source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
+
+# Setup logging infrastructure (config.sh is loaded by setup_wrapper)
 LOG_DIR="$BACKUPS_DIR/logs/heartbeat"
-LOG_FILE="$LOG_DIR/heartbeat-$(date +%Y-%m-%d).log"
+setup_wrapper "$LOG_DIR" "heartbeat"
+
+# Locate heartbeat script
 HEARTBEAT_SCRIPT="$SCRIPT_DIR/../scripts/backup-status.sh"
-
-# Ensure log directory exists
-mkdir -p "$LOG_DIR"
-
-# Function to log to both journal and file
-log() {
-    local message="$1"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] $message" | tee -a "$LOG_FILE"
-}
 
 # Start logging
 log "=== Backup Heartbeat Check Started ==="
 log "Log file: $LOG_FILE"
+log ""
 
-# Run the heartbeat check
-log "Executing: $HEARTBEAT_SCRIPT heartbeat"
-if "$HEARTBEAT_SCRIPT" heartbeat 2>&1 | tee -a "$LOG_FILE"; then
-    EXIT_CODE=0
-    log "=== Backup Heartbeat Check COMPLETED SUCCESSFULLY ==="
+# Execute heartbeat check with logging (Issue 10)
+if run_with_logging "Backup Heartbeat Check" "$HEARTBEAT_SCRIPT" heartbeat; then
+    exit $EXIT_SUCCESS
 else
-    EXIT_CODE=$?
-    log "=== Backup Heartbeat Check FAILED with exit code $EXIT_CODE ==="
+    exit $EXIT_ERROR
 fi
-
-exit $EXIT_CODE

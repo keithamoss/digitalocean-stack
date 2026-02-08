@@ -4,37 +4,46 @@ Documentation=https://pgbackrest.org/
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+OnFailure=backup-failure-alert@postgres-full-backup.service
 
 [Service]
 Type=oneshot
+# Run as root to execute docker commands and access pgBackRest container
 User=root
-WorkingDirectory=@STACK_DIR@/backups/postgres/full
+WorkingDirectory=@STACK_DIR@/backups/postgres
 
-# Run FULL backup (weekly) via wrapper script
-ExecStart=@STACK_DIR@/backups/postgres/full/full-backup.sh
+# Container configuration (can be overridden)
+Environment="POSTGRES_DB_CONTAINER=db"
+Environment="POSTGRES_STANZA=main"
 
-# On failure, send Discord alert
-ExecStartPost=/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then @STACK_DIR@/backups/monitoring/send-failure-alert.sh "Full Backup" "$EXIT_STATUS"; fi'
+# Run FULL backup (weekly) via consolidated wrapper script
+ExecStart=@STACK_DIR@/backups/postgres/postgres-backup.sh full
 
-# On success, log to journal
+# Timeout after 2 hours (full backups should complete within this window)
+TimeoutStartSec=7200
+
+# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=postgres-full-backup
 
 # Restart policy
-Restart=on-failure
-RestartSec=5m
+Restart=no
 
-# Resource limits (full backups can use more resources)
+# Resource limits
+# Full backups run weekly at 3 AM Sunday when system load is low
+# Nice=10: Slightly lower priority but not starved (vs Nice=19 for diff)
+# No CPUQuota: Allow full CPU for faster completion of large full backup
+# IOSchedulingClass=best-effort: Standard I/O priority (vs idle for diff)
 Nice=10
 IOSchedulingClass=best-effort
-CPUQuota=75%
 
-# Security
+# Security hardening
 PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/backups/logs/postgres-full
 
 [Install]
 WantedBy=multi-user.target

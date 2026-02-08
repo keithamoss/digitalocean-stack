@@ -10,8 +10,8 @@ OnCalendar=Mon,Tue,Wed,Thu,Fri,Sat *-*-* 03:00:00
 # If system was off, run backup on next boot
 Persistent=true
 
-# Randomize by 5 minutes to avoid conflicts
-RandomizedDelaySec=5min
+# Randomize by 2 minutes (same as full backup for consistency)
+RandomizedDelaySec=2min
 
 [Install]
 WantedBy=timers.target

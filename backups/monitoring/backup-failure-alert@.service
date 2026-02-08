@@ -1,0 +1,18 @@
+[Unit]
+Description=Send Discord alert for %I backup failure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@STACK_DIR@/backups/monitoring/scripts/send-failure-alert.sh "%I" "failed"
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/backups
+
+[Install]
+WantedBy=multi-user.target

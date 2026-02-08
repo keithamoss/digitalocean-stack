@@ -5,35 +5,28 @@
 
 set -euo pipefail
 
-# Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUPS_DIR="$(dirname "$SCRIPT_DIR")"
+# Determine script and backup directories using realpath (Issue 4)
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+BACKUPS_DIR="$(realpath "$SCRIPT_DIR/..")"
+
+# Load shared wrapper library (Issue 1)
+source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
+
+# Setup logging infrastructure (config.sh is loaded by setup_wrapper)
 LOG_DIR="$BACKUPS_DIR/logs/foundry"
-LOG_FILE="$LOG_DIR/backup-$(date +%Y-%m-%d).log"
+setup_wrapper "$LOG_DIR" "backup"
+
+# Locate backup script
 FOUNDRY_BACKUP_SCRIPT="$SCRIPT_DIR/foundry-backup.sh"
-
-# Ensure log directory exists
-mkdir -p "$LOG_DIR"
-
-# Function to log to both journal and file
-log() {
-    local message="$1"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] $message" | tee -a "$LOG_FILE"
-}
 
 # Start logging
 log "=== Foundry VTT Backup Started ==="
 log "Log file: $LOG_FILE"
+log ""
 
-# Run the actual backup script
-log "Executing: $FOUNDRY_BACKUP_SCRIPT"
-if "$FOUNDRY_BACKUP_SCRIPT" 2>&1 | tee -a "$LOG_FILE"; then
-    EXIT_CODE=0
-    log "=== Foundry VTT Backup COMPLETED SUCCESSFULLY ==="
+# Execute backup with logging (Issue 10)
+if run_with_logging "Foundry VTT Backup" "$FOUNDRY_BACKUP_SCRIPT"; then
+    exit $EXIT_SUCCESS
 else
-    EXIT_CODE=$?
-    log "=== Foundry VTT Backup FAILED with exit code $EXIT_CODE ==="
+    exit $EXIT_ERROR
 fi
-
-exit $EXIT_CODE

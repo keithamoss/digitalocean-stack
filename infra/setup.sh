@@ -8,6 +8,15 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Set timezone to AWST (Australia/Perth)
+echo "==> Configuring timezone"
+if [ "$(timedatectl show -p Timezone --value)" != "Australia/Perth" ]; then
+    timedatectl set-timezone Australia/Perth
+    echo "Timezone set to Australia/Perth (AWST)"
+else
+    echo "Timezone already set to Australia/Perth (AWST)"
+fi
+
 # Base system update
 echo "==> Updating system packages"
 apt update -y
@@ -152,3 +161,7 @@ if [ ! -d "/home/$DOCKER_USER/.acme.sh" ]; then
 else
     echo "acme.sh already installed for $DOCKER_USER, skipping"
 fi
+
+# Deploy logrotate configs for all services
+echo "==> Deploying logrotate configs"
+"$STACK_DIR/infra/logrotate.d/deploy-logrotate.sh"

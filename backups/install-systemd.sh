@@ -50,15 +50,38 @@ install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.timer" "${SYST
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
 
+# Install failure alert template service (with substitution)
+install_unit "${SCRIPT_DIR}/monitoring/backup-failure-alert@.service" "${SYSTEMD_DIR}/backup-failure-alert@.service"
+
 # Reload systemd
 echo "Reloading systemd daemon..."
-systemctl daemon-reload
+if ! systemctl daemon-reload; then
+    echo "ERROR: Failed to reload systemd daemon" >&2
+    exit 1
+fi
 
-# Enable timers (but don't start yet)
+# Issue 12: Enable timers with validation (but don't start yet)
 echo "Enabling timers..."
-systemctl enable postgres-diff-backup.timer
-systemctl enable postgres-full-backup.timer
-systemctl enable backup-heartbeat.timer
+FAILED_TIMERS=()
+
+for timer in postgres-diff-backup.timer postgres-full-backup.timer backup-heartbeat.timer; do
+    if systemctl enable "$timer"; then
+        echo "  ✓ Enabled $timer"
+    else
+        echo "  ✗ Failed to enable $timer" >&2
+        FAILED_TIMERS+=("$timer")
+    fi
+done
+
+# Check if any timers failed to enable
+if [[ ${#FAILED_TIMERS[@]} -gt 0 ]]; then
+    echo "" >&2
+    echo "ERROR: Failed to enable the following timers:" >&2
+    for timer in "${FAILED_TIMERS[@]}"; do
+        echo "  - $timer" >&2
+    done
+    exit 1
+fi
 
 echo ""
 echo "✓ Installation complete!"

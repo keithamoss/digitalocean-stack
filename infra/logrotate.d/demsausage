@@ -1,0 +1,68 @@
+# Log rotation for demsausage application logs
+# Logs located at /home/keith/digitalocean-stack/demsausage/logs/
+# Format: [service]-YYYY.MM.DD.log
+
+/home/keith/digitalocean-stack/demsausage/logs/gunicorn/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}
+
+/home/keith/digitalocean-stack/demsausage/logs/rq_workers/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}
+
+/home/keith/digitalocean-stack/demsausage/logs/django/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}
+
+/home/keith/digitalocean-stack/demsausage/logs/supervisord/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}
+
+/home/keith/digitalocean-stack/demsausage/logs/cron/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}

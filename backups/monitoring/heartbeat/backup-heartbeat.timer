@@ -3,8 +3,9 @@ Description=Backup Systems Daily Heartbeat Timer
 Requires=backup-heartbeat.service
 
 [Timer]
-# Run daily at 3:30 AM (30 minutes after backup completion)
-OnCalendar=*-*-* 03:30:00
+# Run daily at 5:00 AM (2 hours after backup start, ensuring completion)
+# Timeouts: postgres-diff=1h, postgres-full=2h, foundry=1.5h
+OnCalendar=*-*-* 05:00:00
 Persistent=true
 
 # Allow some jitter to avoid conflicts

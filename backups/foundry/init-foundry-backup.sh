@@ -11,10 +11,13 @@
 
 set -euo pipefail
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUPS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$BACKUPS_DIR/.." && pwd)"
+# Determine script and backup directories using realpath (Issue 4)
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")" 
+BACKUPS_DIR="$(realpath "$SCRIPT_DIR/..")"
+REPO_ROOT="$(realpath "$BACKUPS_DIR/..")"
+
+# Load centralized configuration (Issue 3)
+source "${BACKUPS_DIR}/config.sh"
 
 echo "=========================================="
 echo "Foundry VTT Backup Repository Setup"
@@ -55,8 +58,8 @@ source "$BACKUPS_DIR/secrets/aws.env"
 # Set restic password
 export RESTIC_PASSWORD=$(cat "$BACKUPS_DIR/secrets/restic.key")
 
-# Configuration
-RESTIC_REPO="s3:s3.${AWS_DEFAULT_REGION}.amazonaws.com/${S3_BUCKET}/pi-hosting/foundry"
+# Configuration - use centralized repo from config.sh (Issue 3)
+RESTIC_REPO="$FOUNDRY_RESTIC_REPO"
 
 echo "Repository: $RESTIC_REPO"
 echo ""
