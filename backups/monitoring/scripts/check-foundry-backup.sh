@@ -38,15 +38,35 @@ validate_foundry_backup_system() {
     export RESTIC_PASSWORD=$(cat "$FOUNDRY_RESTIC_KEY")
     
     # Get snapshots with JSON validation (Issue 15)
+    # Note: When run as root, shell initialization may print messages to stdout
+    # We need to extract only the JSON array from the output
+    # Use --no-cache for faster status checks (we're only reading metadata, not restoring)
     local snapshots
-    if ! snapshots=$(restic -r "$FOUNDRY_RESTIC_REPO" snapshots --json --latest 1 2>&1); then
-        echo "ERROR: Failed to query restic repository: $snapshots" >&2
+    local restic_output
+    local restic_stderr
+    
+    # Capture stdout and stderr separately
+    restic_stderr=$(mktemp)
+    if ! restic_output=$(restic --no-cache -r "$FOUNDRY_RESTIC_REPO" snapshots --json --latest 1 2>"$restic_stderr"); then
+        local error_msg=$(cat "$restic_stderr")
+        rm -f "$restic_stderr"
+        echo "ERROR: Failed to query restic repository: $error_msg" >&2
+        return 1
+    fi
+    rm -f "$restic_stderr"
+    
+    # Extract only the JSON array (lines starting with '[' or '{')
+    # This filters out shell initialization messages like "Wi-Fi is currently blocked"
+    snapshots=$(echo "$restic_output" | grep -E '^\[|^\{' | head -1)
+    
+    if [[ -z "$snapshots" ]]; then
+        echo "ERROR: No JSON output found from restic. Raw output: ${restic_output:0:200}" >&2
         return 1
     fi
     
     # Validate JSON is parseable (Issue 15)
     if ! echo "$snapshots" | jq empty 2>/dev/null; then
-        echo "ERROR: Restic output is not valid JSON" >&2
+        echo "ERROR: Restic output is not valid JSON. Output: ${snapshots:0:200}" >&2
         return 1
     fi
     
@@ -98,20 +118,26 @@ validate_foundry_backup_system() {
     local pruning_message=""
     
     local all_snapshots
-    if all_snapshots=$(restic -r "$FOUNDRY_RESTIC_REPO" snapshots --json --tag foundry 2>&1); then
-        # Get oldest snapshot time - restic returns ISO8601 format
-        local oldest_time_str=$(echo "$all_snapshots" | jq -r 'min_by(.time) | .time')
-        if [[ -n "$oldest_time_str" ]] && [[ "$oldest_time_str" != "null" ]]; then
-            # Issue 4: Validate date parsing before use
-            if oldest_snapshot_time=$(date -d "$oldest_time_str" +%s 2>/dev/null); then
-                # Validate timestamp is reasonable
-                if ((oldest_snapshot_time > now + 3600)) || ((oldest_snapshot_time < now - 63072000)); then
-                    echo "WARNING: Oldest snapshot time outside reasonable range: $oldest_time_str" >&2
+    local all_snapshots_raw
+    if all_snapshots_raw=$(restic --no-cache -r "$FOUNDRY_RESTIC_REPO" snapshots --json --tag foundry 2>/dev/null); then
+        # Extract only the JSON array, filtering out shell initialization messages
+        all_snapshots=$(echo "$all_snapshots_raw" | grep -E '^\[|^\{' | head -1)
+        
+        if [[ -n "$all_snapshots" ]] && echo "$all_snapshots" | jq empty 2>/dev/null; then
+            # Get oldest snapshot time - restic returns ISO8601 format
+            local oldest_time_str=$(echo "$all_snapshots" | jq -r 'min_by(.time) | .time')
+            if [[ -n "$oldest_time_str" ]] && [[ "$oldest_time_str" != "null" ]]; then
+                # Issue 4: Validate date parsing before use
+                if oldest_snapshot_time=$(date -d "$oldest_time_str" +%s 2>/dev/null); then
+                    # Validate timestamp is reasonable
+                    if ((oldest_snapshot_time > now + 3600)) || ((oldest_snapshot_time < now - 63072000)); then
+                        echo "WARNING: Oldest snapshot time outside reasonable range: $oldest_time_str" >&2
+                        oldest_snapshot_time="$snapshot_time"  # Fall back to latest snapshot time
+                    fi
+                else
+                    echo "WARNING: Failed to parse oldest snapshot time: $oldest_time_str" >&2
                     oldest_snapshot_time="$snapshot_time"  # Fall back to latest snapshot time
                 fi
-            else
-                echo "WARNING: Failed to parse oldest snapshot time: $oldest_time_str" >&2
-                oldest_snapshot_time="$snapshot_time"  # Fall back to latest snapshot time
             fi
         fi
         
@@ -129,27 +155,7 @@ validate_foundry_backup_system() {
         pruning_status="Unknown"
     fi
     
-    # Get detailed stats from the latest snapshot
-    local world_count="0"
-    local systems_count="0"
-    local modules_count="0"
-    
-    local snapshot_stats
-    if snapshot_stats=$(restic -r "$FOUNDRY_RESTIC_REPO" ls "$snapshot_id" --json 2>&1); then
-        # Issue 5: Count worlds safely - grep -c returns 1 if no matches, handle explicitly
-        # Temporarily disable pipefail for grep operations
-        set +o pipefail
-        world_count=$(echo "$snapshot_stats" | jq -r 'select(.struct_type == "node" and .path != null) | .path' | { grep -c "Data/worlds/[^/]*$" || true; })
-        [[ -z "$world_count" ]] && world_count="0"
-        
-        # Count systems and modules
-        systems_count=$(echo "$snapshot_stats" | jq -r 'select(.struct_type == "node" and .path != null) | .path' | { grep -c "Data/systems/[^/]*$" || true; })
-        [[ -z "$systems_count" ]] && systems_count="0"
-        modules_count=$(echo "$snapshot_stats" | jq -r 'select(.struct_type == "node" and .path != null) | .path' | { grep -c "Data/modules/[^/]*$" || true; })
-        [[ -z "$modules_count" ]] && modules_count="0"
-        # Re-enable pipefail
-        set -o pipefail
-    fi
+
     
     # Calculate age
     local age_seconds=$((now - snapshot_time))
@@ -170,9 +176,6 @@ validate_foundry_backup_system() {
         --arg oldest_snapshot_time "$oldest_snapshot_time" \
         --arg pruning_status "$pruning_status" \
         --arg pruning_message "$pruning_message" \
-        --arg world_count "$world_count" \
-        --arg systems_count "$systems_count" \
-        --arg modules_count "$modules_count" \
         --arg age_hours "$age_hours" \
         --arg status "$status" \
         '{
@@ -183,9 +186,6 @@ validate_foundry_backup_system() {
             oldest_snapshot_time: $oldest_snapshot_time,
             pruning_status: $pruning_status,
             pruning_message: $pruning_message,
-            world_count: $world_count,
-            systems_count: $systems_count,
-            modules_count: $modules_count,
             age_hours: $age_hours,
             status: $status
         }'
@@ -209,9 +209,6 @@ validate_foundry_backup_system() {
 #   FOUNDRY_OLDEST_SNAPSHOT_TIME - Oldest snapshot timestamp
 #   FOUNDRY_PRUNING_STATUS - Pruning health status
 #   FOUNDRY_PRUNING_MESSAGE - Pruning status details
-#   FOUNDRY_WORLD_COUNT - Number of worlds backed up
-#   FOUNDRY_SYSTEMS_COUNT - Number of systems
-#   FOUNDRY_MODULES_COUNT - Number of modules
 #   FOUNDRY_AGE_HOURS - Age of backup in hours
 #   FOUNDRY_STATUS - Overall status (Healthy/Stale)
 #   FOUNDRY_STATUS_EMOJI - Status emoji
@@ -226,9 +223,6 @@ get_foundry_backup_stats() {
     FOUNDRY_OLDEST_SNAPSHOT_TIME=$(echo "$foundry_info" | jq -r '.oldest_snapshot_time')
     FOUNDRY_PRUNING_STATUS=$(echo "$foundry_info" | jq -r '.pruning_status')
     FOUNDRY_PRUNING_MESSAGE=$(echo "$foundry_info" | jq -r '.pruning_message')
-    FOUNDRY_WORLD_COUNT=$(echo "$foundry_info" | jq -r '.world_count')
-    FOUNDRY_SYSTEMS_COUNT=$(echo "$foundry_info" | jq -r '.systems_count')
-    FOUNDRY_MODULES_COUNT=$(echo "$foundry_info" | jq -r '.modules_count')
     FOUNDRY_AGE_HOURS=$(echo "$foundry_info" | jq -r '.age_hours')
     FOUNDRY_STATUS=$(echo "$foundry_info" | jq -r '.status')
     

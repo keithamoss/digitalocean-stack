@@ -60,13 +60,19 @@ if ! systemctl daemon-reload; then
     exit 1
 fi
 
-# Issue 12: Enable timers with validation (but don't start yet)
-echo "Enabling timers..."
+# Issue 12: Enable and start timers with validation
+echo "Enabling and starting timers..."
 FAILED_TIMERS=()
 
-for timer in postgres-diff-backup.timer postgres-full-backup.timer backup-heartbeat.timer; do
+for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer backup-heartbeat.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
+        if systemctl start "$timer"; then
+            echo "  ✓ Started $timer"
+        else
+            echo "  ✗ Failed to start $timer" >&2
+            FAILED_TIMERS+=("$timer")
+        fi
     else
         echo "  ✗ Failed to enable $timer" >&2
         FAILED_TIMERS+=("$timer")
@@ -84,7 +90,7 @@ if [[ ${#FAILED_TIMERS[@]} -gt 0 ]]; then
 fi
 
 echo ""
-echo "✓ Installation complete!"
+echo "✓ Installation complete! All timers are enabled and running."
 echo ""
 echo "Stack configuration:"
 echo "  Directory: $STACK_DIR"
@@ -95,12 +101,6 @@ echo "  - Differential backup: Daily at 3:00 AM"
 echo "  - Full backup: Weekly on Sunday at 3:00 AM"
 echo "  - Foundry backup: Daily at 3:10 AM"
 echo "  - Daily heartbeat: Daily at 3:30 AM"
-echo ""
-echo "To start the timers now:"
-echo "  sudo systemctl start postgres-diff-backup.timer"
-echo "  sudo systemctl start postgres-full-backup.timer"
-echo "  sudo systemctl start foundry-backup.timer"
-echo "  sudo systemctl start backup-heartbeat.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers postgres-*"

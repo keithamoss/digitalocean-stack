@@ -241,28 +241,17 @@ heartbeat() {
         return $EXIT_ERROR
     fi
     
-    # Check Foundry backups with timeout - Issue 2,3,10
-    # Use a wrapper function to properly handle timeout and exit codes
+    # Check Foundry backups - call function directly for better performance
+    # The timeout wrapper with bash -c adds ~58 seconds of overhead
     local foundry_info
-    local foundry_timeout_exit=0
-    foundry_info=$(timeout $COMMAND_TIMEOUT bash -c '
-        source "'"$SCRIPT_DIR"'/check-foundry-backup.sh" || exit 1
-        export FOUNDRY_RESTIC_REPO="'"$FOUNDRY_RESTIC_REPO"'"
-        export FOUNDRY_AWS_ENV="'"$FOUNDRY_AWS_ENV"'"
-        export FOUNDRY_RESTIC_KEY="'"$FOUNDRY_RESTIC_KEY"'"
-        validate_foundry_backup_system
-        exit $?
-    ' 2>&1) || foundry_timeout_exit=$?
-    
-    if ((foundry_timeout_exit != 0)); then
-        foundry_check_result=1  # Issue 1,10: 1=error, 0=success
-        if ((foundry_timeout_exit == 124)); then
-            # Timeout occurred
-            foundry_info="Foundry backup check TIMED OUT after ${COMMAND_TIMEOUT}s: ${foundry_info}"
-        fi
-    else
+    if foundry_info=$(validate_foundry_backup_system 2>&1); then
         # Parse the JSON response to set variables
         get_foundry_backup_stats "$foundry_info"
+    else
+        foundry_check_result=1  # Error occurred
+        # Log the actual error for debugging
+        echo "ERROR: Foundry backup check failed" >&2
+        echo "Error output: ${foundry_info}" >&2
     fi
 
     # Robust differential backup check using timestamp (Issue 1, 2, 3, 5, 8)
@@ -411,16 +400,6 @@ heartbeat() {
         status_lines+=("✓ Last backup: \`${foundry_time}\` (${age_display})")
         status_lines+=("✓ Size: \`${foundry_size}\`")
         
-        # Validate counts are numeric or use 'unknown' - Issue 4,11
-        local worlds="${FOUNDRY_WORLD_COUNT:-unknown}"
-        local systems="${FOUNDRY_SYSTEMS_COUNT:-unknown}"
-        local modules="${FOUNDRY_MODULES_COUNT:-unknown}"
-        [[ "$worlds" =~ ^[0-9]+$ ]] || worlds="unknown"
-        [[ "$systems" =~ ^[0-9]+$ ]] || systems="unknown"
-        [[ "$modules" =~ ^[0-9]+$ ]] || modules="unknown"
-        
-        status_lines+=("✓ Worlds: \`${worlds}\` | Systems: \`${systems}\` | Modules: \`${modules}\`")
-        
         # Add oldest backup info if available (Issue 1,11,12)
         if [[ -n "${FOUNDRY_OLDEST_SNAPSHOT_TIME:-}" ]] && \
            validate_numeric "${FOUNDRY_OLDEST_SNAPSHOT_TIME}" "FOUNDRY_OLDEST_SNAPSHOT_TIME" 2>/dev/null; then
@@ -443,6 +422,12 @@ heartbeat() {
         fi
     else
         status_lines+=("✗ Failed to retrieve backup information")
+        # Include the actual error message for debugging
+        if [[ -n "${foundry_info:-}" ]]; then
+            # Sanitize and truncate error message for Discord (avoid exceeding limits)
+            local error_preview="${foundry_info:0:500}"
+            status_lines+=("**Error:** \`${error_preview}\`")
+        fi
         status_lines+=("**Debug:** Check restic repo: \`restic -r ${FOUNDRY_RESTIC_REPO} snapshots\`")
         exit_code=$EXIT_ERROR
     fi
