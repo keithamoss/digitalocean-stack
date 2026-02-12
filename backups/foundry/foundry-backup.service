@@ -14,8 +14,8 @@ WorkingDirectory=@STACK_DIR@/backups/foundry
 # Run backup via wrapper script
 ExecStart=@STACK_DIR@/backups/foundry/backup-wrapper.sh
 
-# Timeout after 1.5 hours (restic backups can take time)
-TimeoutStartSec=5400
+# Timeout after 10 minutes
+TimeoutStartSec=600
 
 # Logging
 StandardOutput=journal

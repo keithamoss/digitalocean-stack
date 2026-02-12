@@ -16,6 +16,9 @@ source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 LOG_DIR="$BACKUPS_DIR/logs/heartbeat"
 setup_wrapper "$LOG_DIR" "heartbeat"
 
+# Install timeout trap handler
+install_timeout_trap
+
 # Locate heartbeat script
 HEARTBEAT_SCRIPT="$SCRIPT_DIR/../scripts/backup-status.sh"
 

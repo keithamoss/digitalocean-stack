@@ -16,6 +16,9 @@ source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 LOG_DIR="$BACKUPS_DIR/logs/foundry"
 setup_wrapper "$LOG_DIR" "backup"
 
+# Install timeout trap handler
+install_timeout_trap
+
 # Locate backup script
 FOUNDRY_BACKUP_SCRIPT="$SCRIPT_DIR/foundry-backup.sh"
 

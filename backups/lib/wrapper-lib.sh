@@ -15,6 +15,7 @@
 #   LOG_FILE - Full path to the log file for this run
 #   TEMP_OUTPUT - Path to temporary output file
 #   START_TIME - Timestamp when wrapper started (for duration tracking)
+#   TIMEOUT_FLAG - Path to file that indicates if timeout occurred
 #
 # Side Effects:
 #   - Creates log directory if it doesn't exist
@@ -36,7 +37,11 @@ setup_wrapper() {
     
     # Create temp file for output capture
     TEMP_OUTPUT=$(mktemp)
-    trap 'rm -f "$TEMP_OUTPUT"' EXIT
+    
+    # Create timeout flag file
+    TIMEOUT_FLAG=$(mktemp)
+    
+    trap 'rm -f "$TEMP_OUTPUT" "$TIMEOUT_FLAG"' EXIT
     
     # Track start time for duration calculation (Issue 10)
     START_TIME=$(date +%s)
@@ -147,4 +152,66 @@ format_duration() {
     else
         printf "%ds" $seconds
     fi
+}
+
+# handle_timeout
+#
+# Signal handler for SIGTERM (systemd timeout)
+# Logs timeout information and marks the run as timed out
+#
+# Globals Used:
+#   LOG_FILE - Log file path
+#   TIMEOUT_FLAG - Path to timeout flag file
+#   START_TIME - Start timestamp
+handle_timeout() {
+    local end_time=$(date +%s)
+    local duration=$((end_time - START_TIME))
+    
+    # Mark that we timed out
+    echo "TIMEOUT" > "$TIMEOUT_FLAG"
+    
+    # Log the timeout
+    log ""
+    log "⏱ TIMEOUT: Systemd killed this job after $(format_duration $duration)"
+    log "The backup process exceeded the configured timeout limit"
+    
+    # Exit with error code
+    exit $EXIT_ERROR
+}
+
+# install_timeout_trap
+#
+# Installs the SIGTERM handler to catch systemd timeouts
+# Should be called in wrapper scripts after setup_wrapper
+install_timeout_trap() {
+    trap 'handle_timeout' TERM
+}
+
+# check_for_timeout
+#
+# Checks if the most recent backup run timed out
+#
+# Arguments:
+#   $1 - LOG_FILE path to check
+#
+# Returns:
+#   0 if timeout detected, 1 if no timeout
+#
+# Output:
+#   Prints timeout message if found
+check_for_timeout() {
+    local log_file="$1"
+    
+    if [[ ! -f "$log_file" ]]; then
+        return 1
+    fi
+    
+    # Check for timeout marker in last 50 lines
+    if tail -50 "$log_file" 2>/dev/null | grep -q "⏱ TIMEOUT:"; then
+        # Extract the timeout message
+        tail -50 "$log_file" | grep "⏱ TIMEOUT:" | tail -1
+        return 0
+    fi
+    
+    return 1
 }

@@ -19,8 +19,8 @@ Environment="POSTGRES_STANZA=main"
 # Run differential backup (daily) via consolidated wrapper script
 ExecStart=@STACK_DIR@/backups/postgres/postgres-backup.sh diff
 
-# Timeout after 1 hour (differential backups should be faster)
-TimeoutStartSec=3600
+# Timeout after 10 minutes
+TimeoutStartSec=600
 
 # Logging
 StandardOutput=journal

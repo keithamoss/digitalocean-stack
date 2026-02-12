@@ -25,6 +25,9 @@ source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 LOG_DIR="$BACKUPS_DIR/logs/postgres-${BACKUP_TYPE}"
 setup_wrapper "$LOG_DIR" "${BACKUP_TYPE}-backup"
 
+# Install timeout trap handler
+install_timeout_trap
+
 # Start logging
 log "=== PostgreSQL ${BACKUP_TYPE^} Backup Started ==="
 log "Log file: $LOG_FILE"

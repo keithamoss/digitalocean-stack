@@ -19,8 +19,8 @@ Environment="POSTGRES_STANZA=main"
 # Run FULL backup (weekly) via consolidated wrapper script
 ExecStart=@STACK_DIR@/backups/postgres/postgres-backup.sh full
 
-# Timeout after 2 hours (full backups should complete within this window)
-TimeoutStartSec=7200
+# Timeout after 30 minutes
+TimeoutStartSec=1800
 
 # Logging
 StandardOutput=journal

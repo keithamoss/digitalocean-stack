@@ -42,6 +42,65 @@ done
 export FOUNDRY_AWS_ENV="${SECRETS_DIR}/aws.env"
 export FOUNDRY_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 
+# get_most_recent_log
+#
+# Gets the most recent log file for a given backup type
+#
+# Arguments:
+#   $1 - Log directory path
+#   $2 - Log prefix (e.g., "backup", "diff-backup", "full-backup")
+#
+# Returns:
+#   Path to most recent log file, or empty string if none found
+get_most_recent_log() {
+    local log_dir="$1"
+    local log_prefix="$2"
+    
+    if [[ ! -d "$log_dir" ]]; then
+        return 1
+    fi
+    
+    # Find most recent log file matching pattern
+    local log_file
+    log_file=$(find "$log_dir" -maxdepth 1 -name "${log_prefix}-*.log" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    
+    if [[ -n "$log_file" ]] && [[ -f "$log_file" ]]; then
+        echo "$log_file"
+        return 0
+    fi
+    
+    return 1
+}
+
+# check_for_timeout_in_log
+#
+# Checks if the most recent backup run timed out
+#
+# Arguments:
+#   $1 - LOG_FILE path to check
+#
+# Returns:
+#   0 if timeout detected, 1 if no timeout
+#
+# Output:
+#   Prints timeout message if found
+check_for_timeout_in_log() {
+    local log_file="$1"
+    
+    if [[ ! -f "$log_file" ]]; then
+        return 1
+    fi
+    
+    # Check for timeout marker in last 50 lines
+    if tail -50 "$log_file" 2>/dev/null | grep -q "⏱ TIMEOUT:"; then
+        # Extract the timeout message
+        tail -50 "$log_file" | grep "⏱ TIMEOUT:" | tail -1
+        return 0
+    fi
+    
+    return 1
+}
+
 # Colors for terminal output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -439,6 +498,42 @@ heartbeat() {
     # Check for specific issues - Issue 1,2,10,12,13
     local has_warnings=0
     local warning_lines=()
+    
+    # Check for timeout in PostgreSQL full backup
+    local pg_full_log
+    if pg_full_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/postgres-full" "full-backup"); then
+        if check_for_timeout_in_log "$pg_full_log"; then
+            warning_lines+=("**TIMEOUT:** PostgreSQL full backup exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-full-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
+    
+    # Check for timeout in PostgreSQL diff backup
+    local pg_diff_log
+    if pg_diff_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/postgres-diff" "diff-backup"); then
+        if check_for_timeout_in_log "$pg_diff_log"; then
+            warning_lines+=("**TIMEOUT:** PostgreSQL differential backup exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-diff-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
+    
+    # Check for timeout in Foundry backup
+    local foundry_log
+    if foundry_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/foundry" "backup"); then
+        if check_for_timeout_in_log "$foundry_log"; then
+            warning_lines+=("**TIMEOUT:** Foundry backup exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u foundry-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
     
     # Check full backup status - Issue 1
     if ((full_backup_status != 0)); then
