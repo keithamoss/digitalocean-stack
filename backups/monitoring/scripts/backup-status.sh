@@ -585,23 +585,42 @@ heartbeat() {
         status_msg+="${warning_msg}"
     fi
     
-    # Send notification based on exit code - Issue 6,17
-    if ((exit_code == EXIT_ERROR)); then
-        status_msg+="\\n**CRITICAL:** Immediate attention required."
-        if ! send_discord "Daily Heartbeat: Critical Errors" "$status_msg" 15548997 "🚨"; then
-            echo "ERROR: Failed to send Discord notification" >&2
-            return $EXIT_ERROR
-        fi
-    elif ((exit_code == EXIT_WARNING)); then
-        if ! send_discord "Daily Heartbeat: Issues Detected" "$status_msg" 16776960 "⚠️"; then
-            echo "ERROR: Failed to send Discord notification" >&2
-            return $EXIT_ERROR
-        fi
+    # Check if we should send Discord notification
+    # Send if: (1) there's an error/warning, OR (2) it's Saturday (6) or Sunday (7)
+    local day_of_week=$(date +%u)
+    local should_send_discord=0
+    
+    if ((exit_code == EXIT_ERROR)) || ((exit_code == EXIT_WARNING)); then
+        # Always send on errors or warnings
+        should_send_discord=1
+        echo "Sending Discord notification: Status contains warnings or errors"
+    elif ((day_of_week == 6)) || ((day_of_week == 7)); then
+        # Send on weekends even if healthy
+        should_send_discord=1
+        echo "Sending Discord notification: Weekend heartbeat"
     else
-        status_msg+="\\nAll systems nominal."
-        if ! send_discord "Backup System Healthy" "$status_msg" 5763719 "✅"; then
-            echo "ERROR: Failed to send Discord notification" >&2
-            return $EXIT_ERROR
+        echo "Skipping Discord notification: Weekday with healthy status"
+    fi
+    
+    # Send notification based on exit code - Issue 6,17
+    if ((should_send_discord == 1)); then
+        if ((exit_code == EXIT_ERROR)); then
+            status_msg+="\\n**CRITICAL:** Immediate attention required."
+            if ! send_discord "Daily Heartbeat: Critical Errors" "$status_msg" 15548997 "🚨"; then
+                echo "ERROR: Failed to send Discord notification" >&2
+                return $EXIT_ERROR
+            fi
+        elif ((exit_code == EXIT_WARNING)); then
+            if ! send_discord "Daily Heartbeat: Issues Detected" "$status_msg" 16776960 "⚠️"; then
+                echo "ERROR: Failed to send Discord notification" >&2
+                return $EXIT_ERROR
+            fi
+        else
+            status_msg+="\\nAll systems nominal."
+            if ! send_discord "Backup System Healthy" "$status_msg" 5763719 "✅"; then
+                echo "ERROR: Failed to send Discord notification" >&2
+                return $EXIT_ERROR
+            fi
         fi
     fi
 
