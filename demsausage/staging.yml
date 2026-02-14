@@ -12,7 +12,7 @@ services:
     ports:
      - "8000:8000"
     volumes:
-      - ./logs/demsausage-django:/app/logs:delegated
+      - ./logs:/app/logs:delegated
     networks:
       - redis
       - demsausage
