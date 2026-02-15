@@ -8,12 +8,13 @@ set -euo pipefail
 # Determine script and backup directories using realpath (Issue 4)
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 BACKUPS_DIR="$(realpath "$SCRIPT_DIR/../..")"
+STACK_DIR="$(realpath "$BACKUPS_DIR/..")"
 
 # Load shared wrapper library (Issue 1)
 source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 
 # Setup logging infrastructure (config.sh is loaded by setup_wrapper)
-LOG_DIR="$BACKUPS_DIR/logs/heartbeat"
+LOG_DIR="$STACK_DIR/logs/backups/heartbeat"
 setup_wrapper "$LOG_DIR" "heartbeat"
 
 # Install timeout trap handler

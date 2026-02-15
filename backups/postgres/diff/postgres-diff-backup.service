@@ -44,7 +44,7 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/backups/logs/postgres-diff
+ReadWritePaths=@STACK_DIR@/logs/backups/postgres-diff
 
 [Install]
 WantedBy=multi-user.target

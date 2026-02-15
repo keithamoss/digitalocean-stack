@@ -17,12 +17,13 @@ fi
 # Determine script and backup directories using realpath (Issue 4)
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 BACKUPS_DIR="$(realpath "$SCRIPT_DIR/..")"
+STACK_DIR="$(realpath "$BACKUPS_DIR/..")"
 
 # Load shared wrapper library (Issue 1)
 source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 
 # Setup logging infrastructure (config.sh is loaded by setup_wrapper)
-LOG_DIR="$BACKUPS_DIR/logs/postgres-${BACKUP_TYPE}"
+LOG_DIR="$STACK_DIR/logs/backups/postgres-${BACKUP_TYPE}"
 setup_wrapper "$LOG_DIR" "${BACKUP_TYPE}-backup"
 
 # Install timeout trap handler

@@ -43,7 +43,7 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/backups/logs/postgres-full
+ReadWritePaths=@STACK_DIR@/logs/backups/postgres-full
 
 [Install]
 WantedBy=multi-user.target

@@ -9,6 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")" 
 MONITORING_DIR="$(realpath "$SCRIPT_DIR/..")"
 BACKUPS_DIR="$(realpath "$MONITORING_DIR/..")"
+STACK_DIR="$(realpath "$BACKUPS_DIR/..")"
 SECRETS_DIR="${BACKUPS_DIR}/secrets"
 DISCORD_ENV="${SECRETS_DIR}/discord.env"
 
@@ -501,7 +502,7 @@ heartbeat() {
     
     # Check for timeout in PostgreSQL full backup
     local pg_full_log
-    if pg_full_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/postgres-full" "full-backup"); then
+    if pg_full_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/postgres-full" "full-backup"); then
         if check_for_timeout_in_log "$pg_full_log"; then
             warning_lines+=("**TIMEOUT:** PostgreSQL full backup exceeded systemd timeout limit.")
             warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-full-backup.service -n 100\`")
@@ -513,7 +514,7 @@ heartbeat() {
     
     # Check for timeout in PostgreSQL diff backup
     local pg_diff_log
-    if pg_diff_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/postgres-diff" "diff-backup"); then
+    if pg_diff_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/postgres-diff" "diff-backup"); then
         if check_for_timeout_in_log "$pg_diff_log"; then
             warning_lines+=("**TIMEOUT:** PostgreSQL differential backup exceeded systemd timeout limit.")
             warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-diff-backup.service -n 100\`")
@@ -525,7 +526,7 @@ heartbeat() {
     
     # Check for timeout in Foundry backup
     local foundry_log
-    if foundry_log=$(get_most_recent_log "${BACKUPS_DIR}/logs/foundry" "backup"); then
+    if foundry_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/foundry" "backup"); then
         if check_for_timeout_in_log "$foundry_log"; then
             warning_lines+=("**TIMEOUT:** Foundry backup exceeded systemd timeout limit.")
             warning_lines+=("**Action:** Review logs: \`journalctl -u foundry-backup.service -n 100\`")

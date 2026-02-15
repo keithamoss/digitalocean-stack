@@ -34,4 +34,4 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/backups @STACK_DIR@/foundry/data /home/@STACK_USER@/.cache/restic
+ReadWritePaths=@STACK_DIR@/logs/backups/foundry @STACK_DIR@/foundry/data /home/@STACK_USER@/.cache/restic
