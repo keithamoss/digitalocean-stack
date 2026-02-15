@@ -41,7 +41,7 @@ export RESTIC_PASSWORD=$(cat "$BACKUPS_DIR/secrets/restic.key")
 # Configuration - use centralized repo from config.sh (Issue 3, 8)
 RESTIC_REPO="$FOUNDRY_RESTIC_REPO"
 FOUNDRY_DATA_DIR="$REPO_ROOT/foundry/data"
-BACKUP_PATHS=("$FOUNDRY_DATA_DIR/Data" "$FOUNDRY_DATA_DIR/Config")
+BACKUP_PATHS=("$FOUNDRY_DATA_DIR/Data" "$FOUNDRY_DATA_DIR/Config" "$FOUNDRY_DATA_DIR/Backups" "$FOUNDRY_DATA_DIR/Logs")
 
 # Logging - now handled by wrapper script, just output to stdout/stderr
 # The foundry-backup-wrapper.sh will capture and log everything
