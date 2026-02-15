@@ -12,7 +12,7 @@ services:
     ports:
      - "8000:8000"
     volumes:
-      - ./logs:/app/logs:delegated
+      - ../logs/demsausage-staging:/app/logs:delegated
     networks:
       - redis
       - demsausage

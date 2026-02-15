@@ -1,8 +1,8 @@
 # Log rotation for demsausage application logs
-# Logs located at /home/keith/digitalocean-stack/demsausage/logs/
+# Logs located at /opt/digitalocean-stack/logs/demsausage-staging/
 # Format: [service]-YYYY.MM.DD.log
 
-/home/keith/digitalocean-stack/demsausage/logs/gunicorn/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/gunicorn/*.log {
     daily
     missingok
     rotate 60
@@ -15,7 +15,7 @@
     extension .log
 }
 
-/home/keith/digitalocean-stack/demsausage/logs/rq_workers/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/rq_workers/*.log {
     daily
     missingok
     rotate 60
@@ -28,7 +28,7 @@
     extension .log
 }
 
-/home/keith/digitalocean-stack/demsausage/logs/django/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/django/*.log {
     daily
     missingok
     rotate 60
@@ -41,7 +41,7 @@
     extension .log
 }
 
-/home/keith/digitalocean-stack/demsausage/logs/supervisord/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/supervisord/*.log {
     daily
     missingok
     rotate 60
@@ -54,7 +54,7 @@
     extension .log
 }
 
-/home/keith/digitalocean-stack/demsausage/logs/cron/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/cron/*.log {
     daily
     missingok
     rotate 60
@@ -67,7 +67,7 @@
     extension .log
 }
 
-/home/keith/digitalocean-stack/demsausage/logs/webdriver/*.log {
+/opt/digitalocean-stack/demsausage/logs/webdriver/*.log {
     daily
     missingok
     rotate 60

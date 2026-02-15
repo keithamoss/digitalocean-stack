@@ -76,6 +76,24 @@ else
 fi
 cd "$STACK_DIR"
 
+# Create symlink for user-independent paths (used in logrotate configs and systemd units)
+echo "==> Creating symlink /opt/digitalocean-stack -> $STACK_DIR"
+if [ -L "/opt/digitalocean-stack" ]; then
+    CURRENT_TARGET=$(readlink -f /opt/digitalocean-stack)
+    if [ "$CURRENT_TARGET" != "$STACK_DIR" ]; then
+        echo "Updating symlink from '$CURRENT_TARGET' to '$STACK_DIR'"
+        ln -sfn "$STACK_DIR" /opt/digitalocean-stack
+    else
+        echo "Symlink already points to correct location"
+    fi
+elif [ -e "/opt/digitalocean-stack" ]; then
+    echo "ERROR: /opt/digitalocean-stack exists but is not a symlink" >&2
+    exit 1
+else
+    ln -s "$STACK_DIR" /opt/digitalocean-stack
+    echo "Created symlink /opt/digitalocean-stack -> $STACK_DIR"
+fi
+
 # Early check for restic encryption key (fail fast before installing packages)
 echo "==> Checking for restic encryption key"
 RESTIC_KEY_FILE="$STACK_DIR/backups/secrets/restic.key"
