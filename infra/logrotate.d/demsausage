@@ -66,3 +66,16 @@
     dateformat -%Y.%m.%d
     extension .log
 }
+
+/home/keith/digitalocean-stack/demsausage/logs/webdriver/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}

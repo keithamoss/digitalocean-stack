@@ -19,7 +19,13 @@ fi
 
 for config in "$SRC_DIR"/*; do
     [ -f "$config" ] || continue
-    name="digitalocean-stack-$(basename "$config")"
+    basename="$(basename "$config")"
+    
+    # Skip non-config files
+    [[ "$basename" == *.sh ]] && continue
+    [[ "$basename" == *.md ]] && continue
+    
+    name="digitalocean-stack-$basename"
     cp "$config" "$DEST_DIR/$name"
     chmod 644 "$DEST_DIR/$name"
     echo "✓ Installed $DEST_DIR/$name"
