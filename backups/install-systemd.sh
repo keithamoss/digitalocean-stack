@@ -49,6 +49,8 @@ install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.service" "${SY
 install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.timer" "${SYSTEMD_DIR}/backup-heartbeat.timer"
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
+install_unit "${SCRIPT_DIR}/docker/docker-logs-export.service" "${SYSTEMD_DIR}/docker-logs-export.service"
+install_unit "${SCRIPT_DIR}/docker/docker-logs-export.timer" "${SYSTEMD_DIR}/docker-logs-export.timer"
 
 # Install failure alert template service (with substitution)
 install_unit "${SCRIPT_DIR}/monitoring/backup-failure-alert@.service" "${SYSTEMD_DIR}/backup-failure-alert@.service"
@@ -60,19 +62,16 @@ if ! systemctl daemon-reload; then
     exit 1
 fi
 
-# Issue 12: Enable and start timers with validation
-echo "Enabling and starting timers..."
+# Issue 12: Enable timers with validation
+# Note: Timers are enabled but not started to avoid triggering backups during installation.
+# They will start automatically on next reboot. To start them now, run:
+#   sudo systemctl start <timer-name>
+echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer backup-heartbeat.timer; do
+for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
-        if systemctl start "$timer"; then
-            echo "  ✓ Started $timer"
-        else
-            echo "  ✗ Failed to start $timer" >&2
-            FAILED_TIMERS+=("$timer")
-        fi
     else
         echo "  ✗ Failed to enable $timer" >&2
         FAILED_TIMERS+=("$timer")
@@ -90,7 +89,7 @@ if [[ ${#FAILED_TIMERS[@]} -gt 0 ]]; then
 fi
 
 echo ""
-echo "✓ Installation complete! All timers are enabled and running."
+echo "✓ Installation complete! All timers are enabled."
 echo ""
 echo "Stack configuration:"
 echo "  Directory: $STACK_DIR"
@@ -100,10 +99,15 @@ echo "Backup schedule:"
 echo "  - Differential backup: Daily at 3:00 AM"
 echo "  - Full backup: Weekly on Sunday at 3:00 AM"
 echo "  - Foundry backup: Daily at 3:10 AM"
+echo "  - Docker logs export: Daily at 3:15 AM"
 echo "  - Daily heartbeat: Daily at 3:30 AM"
 echo ""
+echo "IMPORTANT: Timers are enabled but not started to avoid triggering backups during installation."
+echo "They will start automatically on next reboot, or you can start them now:"
+echo "  sudo systemctl start postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer"
+echo ""
 echo "To check timer status:"
-echo "  systemctl list-timers postgres-*"
+echo "  systemctl list-timers"
 echo ""
 echo "To manually run a backup:"
 echo "  sudo systemctl start postgres-diff-backup.service  # Differential"
