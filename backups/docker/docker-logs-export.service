@@ -1,0 +1,40 @@
+[Unit]
+Description=Docker Logs Export
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+OnFailure=backup-failure-alert@docker-logs-export.service
+
+[Service]
+Type=oneshot
+# Run as stack user
+User=@STACK_USER@
+Group=@STACK_USER@
+# Add user to docker group for socket access
+SupplementaryGroups=docker
+WorkingDirectory=@STACK_DIR@/backups/docker
+
+# Run export via wrapper script
+ExecStart=@STACK_DIR@/backups/docker/docker-logs-export-wrapper.sh
+
+# Timeout after 5 minutes
+TimeoutStartSec=300
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=docker-logs-export
+
+# Restart policy
+Restart=no
+
+# Resource limits
+CPUQuota=30%
+MemoryMax=512M
+
+# Security hardening (relaxed for Docker access)
+PrivateTmp=yes
+NoNewPrivileges=yes
+# ProtectSystem=strict - Disabled for Docker socket access
+# ProtectHome=read-only - Disabled for Docker socket access
+ReadWritePaths=@STACK_DIR@/logs/docker @STACK_DIR@/logs/backups/docker-logs

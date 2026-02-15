@@ -26,6 +26,11 @@ services:
       - "--max-item-size=5242880"
     networks:
       - demsausage
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
   rq_dashboard:
     image: keithmoss/demsausage-rq-dashboard:latest-staging
     ports:
@@ -35,6 +40,11 @@ services:
     networks:
       - redis
       - demsausage
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
   # logshipper:
   #   image: timberio/vector:0.51.1-alpine
   #   depends_on:

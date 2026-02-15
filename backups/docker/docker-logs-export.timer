@@ -1,0 +1,12 @@
+[Unit]
+Description=Docker Logs Export Timer
+Requires=docker-logs-export.service
+
+[Timer]
+# Run at 3:15 AM daily (5 minutes after Foundry backup)
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

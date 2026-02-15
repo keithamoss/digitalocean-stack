@@ -12,3 +12,8 @@ services:
       - FOUNDRY_TZ=Australia/Perth
     ports:
       - "30000:30000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"

@@ -4,8 +4,18 @@ services:
     command: tunnel run
     env_file:
       - secrets/cloudflared-demsausage-org.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
   cloudflared-keithmoss-me:
     image: cloudflare/cloudflared:latest
     command: tunnel run
     env_file:
       - secrets/cloudflared-keithmoss-me.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"

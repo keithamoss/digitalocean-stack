@@ -19,3 +19,8 @@ services:
     # https://github.com/docker-library/redis/issues/35#issuecomment-360810072
     sysctls:
       net.core.somaxconn: "511"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
