@@ -8,7 +8,8 @@ docker compose -f ../db/compose.yml stop
 # Ensure log directories exist with correct ownership for postgres (UID 999)
 sudo mkdir -p ../db/logs/postgresql ../db/logs/pgbackrest
 sudo chown -R 999:999 ../db/logs/postgresql ../db/logs/pgbackrest
-sudo chmod 700 ../db/logs/postgresql
+# 705 = rwx---r-x: Owner (postgres) has full access, others can read logs without sudo
+sudo chmod 705 ../db/logs/postgresql
 
 docker compose -f ../db/compose.yml up --remove-orphans -d
 
