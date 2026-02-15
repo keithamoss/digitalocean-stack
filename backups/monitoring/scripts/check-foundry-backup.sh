@@ -81,11 +81,13 @@ validate_foundry_backup_system() {
         return 1
     fi
     
-    # Extract latest snapshot info
-    local snapshot_id=$(echo "$snapshots" | jq -r '.[0].short_id')
+    # Extract latest snapshot info (sort by time descending, take first)
+    # When paths change, --latest 1 returns multiple snapshots (one per path group)
+    # so we explicitly sort by time to get the absolute latest
+    local snapshot_id=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].short_id')
     
     # Issue 4: Validate date parsing - get ISO8601 time and validate before conversion
-    local snapshot_time_str=$(echo "$snapshots" | jq -r '.[0].time')
+    local snapshot_time_str=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].time')
     if [[ -z "$snapshot_time_str" ]] || [[ "$snapshot_time_str" == "null" ]]; then
         echo "ERROR: Failed to extract snapshot time from JSON" >&2
         return 1
@@ -109,8 +111,8 @@ validate_foundry_backup_system() {
         return 1
     fi
     
-    local snapshot_files=$(echo "$snapshots" | jq -r '.[0].summary.total_files_processed // 0')
-    local snapshot_size=$(echo "$snapshots" | jq -r '.[0].summary.total_bytes_processed // 0')
+    local snapshot_files=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].summary.total_files_processed // 0')
+    local snapshot_size=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].summary.total_bytes_processed // 0')
     
     # Get oldest snapshot for pruning health check
     local oldest_snapshot_time="$snapshot_time"
