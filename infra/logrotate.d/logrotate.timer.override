@@ -1,0 +1,5 @@
+[Timer]
+# Override the default 1h random delay to run at exactly midnight
+# This ensures logs are rotated precisely at day boundaries to avoid
+# post-midnight logs ending up in the previous day's rotated file
+RandomizedDelaySec=0
