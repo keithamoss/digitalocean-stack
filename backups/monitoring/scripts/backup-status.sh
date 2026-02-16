@@ -623,6 +623,33 @@ heartbeat() {
                 return $EXIT_ERROR
             fi
         fi
+    else
+        # Log what would have been sent (even when skipped)
+        local log_title log_color log_emoji log_msg
+        log_msg="${status_msg}"
+        if ((exit_code == EXIT_ERROR)); then
+            log_title="Daily Heartbeat: Critical Errors"
+            log_color=15548997
+            log_emoji="🚨"
+            log_msg+="\\n**CRITICAL:** Immediate attention required."
+        elif ((exit_code == EXIT_WARNING)); then
+            log_title="Daily Heartbeat: Issues Detected"
+            log_color=16776960
+            log_emoji="⚠️"
+        else
+            log_title="Backup System Healthy"
+            log_color=5763719
+            log_emoji="✅"
+            log_msg+="\\nAll systems nominal."
+        fi
+        
+        # Log notification details that would have been sent
+        echo "--- Would Have Sent Discord Notification ---"
+        echo "Title: ${log_emoji} ${log_title}"
+        echo "Color: ${log_color}"
+        echo "Description:"
+        printf '%b\n' "$log_msg"
+        echo "-------------------------------------------"
     fi
 
     return $exit_code
