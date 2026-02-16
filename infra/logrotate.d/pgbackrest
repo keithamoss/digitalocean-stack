@@ -1,0 +1,16 @@
+# Log rotation for pgbackrest logs
+# Logs located at /opt/digitalocean-stack/logs/db/pgbackrest/
+# Format: main-backup-YYYY.MM.DD.log, main-expire-YYYY.MM.DD.log
+
+/opt/digitalocean-stack/logs/db/pgbackrest/*.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+}
