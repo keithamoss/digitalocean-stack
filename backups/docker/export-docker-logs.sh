@@ -11,8 +11,12 @@ set -euo pipefail
 
 # Configuration
 LOG_DIR="/home/keith/digitalocean-stack/logs/docker"
-DATE=$(date +%Y-%m-%d)
+# Use yesterday's date since we run just after midnight
+DATE=$(date -d 'yesterday' +%Y-%m-%d)
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+# Precise date range: yesterday midnight to midnight
+SINCE_DATE=$(date -d 'yesterday' +%Y-%m-%d)T00:00:00
+UNTIL_DATE=$(date -d 'yesterday' +%Y-%m-%d)T23:59:59
 
 # Services to export (NO file-based logging)
 SERVICES_TO_EXPORT=(
@@ -41,8 +45,8 @@ for service in "${SERVICES_TO_EXPORT[@]}"; do
         
         echo "Exporting logs for $service..."
         
-        # Export logs from the past 24 hours with timestamps
-        docker logs --since 24h "$service" > "$log_file" 2>&1 || {
+        # Export logs with precise date range (yesterday midnight to midnight)
+        docker logs --since "$SINCE_DATE" --until "$UNTIL_DATE" "$service" > "$log_file" 2>&1 || {
             echo "WARNING: Failed to export logs for $service"
             continue
         }
