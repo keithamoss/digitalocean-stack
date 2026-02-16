@@ -3,7 +3,8 @@ Description=Docker Logs Export Timer
 Requires=docker-logs-export.service
 
 [Timer]
-# Run at 00:15 daily to capture previous day's logs (midnight to midnight)
+# Run at 00:15 daily, 15 minutes after logrotate (00:00)
+# This allows logrotate to rotate yesterday's logs before we write today's
 OnCalendar=*-*-* 00:15:00
 Persistent=true
 RandomizedDelaySec=30

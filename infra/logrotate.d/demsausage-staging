@@ -67,7 +67,7 @@
     extension .log
 }
 
-/opt/digitalocean-stack/demsausage/logs/webdriver/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/webdriver/*.log {
     daily
     missingok
     rotate 60

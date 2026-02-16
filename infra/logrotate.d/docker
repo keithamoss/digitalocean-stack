@@ -1,0 +1,24 @@
+# Docker container logs exported daily to static filenames
+# Export runs at 00:15 (15 min after logrotate), writes yesterday's logs
+# Rotate exported logs with 60-day retention
+# ONLY for services without file-based logging:
+#   - Redis
+#   - memcached
+#   - rq_dashboard  
+#   - cloudflared tunnels
+#   - Foundry
+
+/home/keith/digitalocean-stack/logs/docker/*.log {
+    su keith keith
+    daily
+    rotate 60
+    maxage 60
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    dateformat -%Y.%m.%d
+    extension .log
+    # No postrotate needed - export script refills the file at 00:15
+}

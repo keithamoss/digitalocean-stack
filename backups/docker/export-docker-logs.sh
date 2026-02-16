@@ -4,16 +4,14 @@
 # Only exports: Redis, memcached, rq_dashboard, cloudflared tunnels, Foundry
 # Skips: nginx, demsausage, PostgreSQL (already have file-based logs)
 #
-# Run daily at 3:15 AM via systemd timer
+# Run daily at 00:15 (after logrotate at 00:00) via systemd timer
+# Writes to static filenames - logrotate handles rotation/compression/retention
 #
 
 set -euo pipefail
 
 # Configuration
 LOG_DIR="/home/keith/digitalocean-stack/logs/docker"
-# Use yesterday's date since we run just after midnight
-DATE=$(date -d 'yesterday' +%Y-%m-%d)
-TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 # Precise date range: yesterday midnight to midnight
 SINCE_DATE=$(date -d 'yesterday' +%Y-%m-%d)T00:00:00
 UNTIL_DATE=$(date -d 'yesterday' +%Y-%m-%d)T23:59:59
@@ -38,14 +36,13 @@ echo "Exporting logs for services without file-based logging only"
 for service in "${SERVICES_TO_EXPORT[@]}"; do
     # Check if container exists and is running
     if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
-        service_log_dir="$LOG_DIR/$service"
-        mkdir -p "$service_log_dir"
-        
-        log_file="$service_log_dir/${service}_${DATE}.log"
+        # Write to flat directory structure - logrotate will rotate at midnight
+        log_file="$LOG_DIR/${service}.log"
         
         echo "Exporting logs for $service..."
         
         # Export logs with precise date range (yesterday midnight to midnight)
+        # Overwrite the file (it was already rotated by logrotate at 00:00)
         docker logs --since "$SINCE_DATE" --until "$UNTIL_DATE" "$service" > "$log_file" 2>&1 || {
             echo "WARNING: Failed to export logs for $service"
             continue
@@ -66,6 +63,7 @@ echo ""
 echo "Summary:"
 echo "  Total services exported: ${#SERVICES_TO_EXPORT[@]}"
 echo "  Log directory: $LOG_DIR"
+echo "  Rotation/compression/retention: Managed by logrotate (runs at 00:00)"
 echo "  Note: nginx, demsausage, and PostgreSQL logs are already captured via volume mounts"
 echo ""
 
