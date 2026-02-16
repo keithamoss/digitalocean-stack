@@ -41,8 +41,8 @@ for service in "${SERVICES_TO_EXPORT[@]}"; do
         
         echo "Exporting logs for $service..."
         
-        # Export all logs with timestamps
-        docker logs "$service" > "$log_file" 2>&1 || {
+        # Export logs from the past 24 hours with timestamps
+        docker logs --since 24h "$service" > "$log_file" 2>&1 || {
             echo "WARNING: Failed to export logs for $service"
             continue
         }
