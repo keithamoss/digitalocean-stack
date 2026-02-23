@@ -1,5 +1,6 @@
 [Timer]
-# Override the default 1h random delay to run at exactly midnight
-# This ensures logs are rotated precisely at day boundaries to avoid
-# post-midnight logs ending up in the previous day's rotated file
+# Override default timing to run at 00:15 (after docker-logs-export at 00:02)
+# This allows export to write yesterday's logs before rotation
+OnCalendar=
+OnCalendar=*-*-* 00:15:00
 RandomizedDelaySec=0

@@ -4,7 +4,7 @@
 # Only exports: Redis, memcached, rq_dashboard, cloudflared tunnels, Foundry
 # Skips: nginx, demsausage, PostgreSQL (already have file-based logs)
 #
-# Run daily at 00:15 (after logrotate at 00:00) via systemd timer
+# Run daily at 00:02 via systemd timer (before logrotate at 00:15)
 # Writes to static filenames - logrotate handles rotation/compression/retention
 #
 

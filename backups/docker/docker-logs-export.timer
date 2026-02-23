@@ -3,11 +3,11 @@ Description=Docker Logs Export Timer
 Requires=docker-logs-export.service
 
 [Timer]
-# Run at 00:15 daily, 15 minutes after logrotate (00:00)
-# This allows logrotate to rotate yesterday's logs before we write today's
-OnCalendar=*-*-* 00:15:00
+# Run at 00:02 daily, just after midnight
+# Export yesterday's logs, then logrotate (00:15) immediately rotates them
+OnCalendar=*-*-* 00:02:00
 Persistent=true
-RandomizedDelaySec=30
+RandomizedDelaySec=0
 
 [Install]
 WantedBy=timers.target
