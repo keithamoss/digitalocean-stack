@@ -11,7 +11,8 @@
 set -euo pipefail
 
 # Configuration
-LOG_DIR="/home/keith/digitalocean-stack/logs/docker"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="${SCRIPT_DIR}/../../logs/docker"
 # Precise date range: yesterday midnight to midnight
 SINCE_DATE=$(date -d 'yesterday' +%Y-%m-%d)T00:00:00
 UNTIL_DATE=$(date -d 'yesterday' +%Y-%m-%d)T23:59:59

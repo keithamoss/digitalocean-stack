@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../lib/wrapper-lib.sh"
 
 # Configuration
-LOG_DIR="/home/keith/digitalocean-stack/logs/backups/docker-logs"
+LOG_DIR="${SCRIPT_DIR}/../../logs/backups/docker-logs"
 LOG_FILE="${LOG_DIR}/docker-logs-export_$(date +%Y-%m-%d).log"
 EXPORT_SCRIPT="${SCRIPT_DIR}/export-docker-logs.sh"
 
