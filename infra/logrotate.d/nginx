@@ -19,6 +19,6 @@
     sharedscripts
     postrotate
         # Send USR1 signal to nginx container to reopen log files
-        docker exec nginx nginx -s reopen 2>/dev/null || true
+        docker exec nginx-nginx-1 nginx -s reopen 2>/dev/null || true
     endscript
 }
