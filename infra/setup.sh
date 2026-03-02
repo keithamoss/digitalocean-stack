@@ -163,8 +163,9 @@ if [ -f "$STACK_DIR/backups/secrets/aws.env" ]; then
 fi
 
 # Secure Redis users.acl if it exists
+# 640 (not 600) so the Redis container process (running as a different UID) can read it via group access
 if [ -f "$STACK_DIR/redis/conf/users.acl" ]; then
-    chmod 600 "$STACK_DIR/redis/conf/users.acl"
+    chmod 640 "$STACK_DIR/redis/conf/users.acl"
     chown "$DOCKER_USER:$DOCKER_USER" "$STACK_DIR/redis/conf/users.acl"
     echo "  ✓ Secured redis/conf/users.acl"
 fi
