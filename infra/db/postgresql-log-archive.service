@@ -1,0 +1,30 @@
+[Unit]
+Description=PostgreSQL Log Archive
+OnFailure=backup-failure-alert@postgresql-log-archive.service
+
+[Service]
+Type=oneshot
+# Run as root — required to read/write log files created by the postgres container
+User=root
+Group=root
+WorkingDirectory=@STACK_DIR@/infra/db
+
+ExecStart=@STACK_DIR@/infra/db/postgresql-log-archive.sh
+
+# Timeout after 5 minutes (should complete in seconds)
+TimeoutStartSec=300
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=postgresql-log-archive
+
+# Restart policy
+Restart=no
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs/db/postgresql

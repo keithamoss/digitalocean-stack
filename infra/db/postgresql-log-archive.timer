@@ -1,0 +1,12 @@
+[Unit]
+Description=PostgreSQL Log Archive Timer
+Requires=postgresql-log-archive.service
+
+[Timer]
+# Run at 00:20 daily — after logrotate (00:15) has finished processing other logs
+OnCalendar=*-*-* 00:20:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
