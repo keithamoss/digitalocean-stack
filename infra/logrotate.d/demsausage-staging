@@ -1,8 +1,10 @@
 # Log rotation for demsausage application logs
 # Logs located at /opt/digitalocean-stack/logs/demsausage-staging/
 # Format: [service]-YYYY.MM.DD.log
+# Note: Use specific filenames to avoid rotating already-rotated files
+# Rotated logs are moved to archive/ subdirectories
 
-/opt/digitalocean-stack/logs/demsausage-staging/gunicorn/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/gunicorn/gunicorn_a.log /opt/digitalocean-stack/logs/demsausage-staging/gunicorn/gunicorn_b.log {
     daily
     missingok
     rotate 60
@@ -11,11 +13,14 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }
 
-/opt/digitalocean-stack/logs/demsausage-staging/rq_workers/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/rq_workers/rq_workers.log {
     daily
     missingok
     rotate 60
@@ -24,11 +29,14 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }
 
-/opt/digitalocean-stack/logs/demsausage-staging/django/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/django/django.log {
     daily
     missingok
     rotate 60
@@ -37,11 +45,14 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }
 
-/opt/digitalocean-stack/logs/demsausage-staging/supervisord/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/supervisord/supervisord.log {
     daily
     missingok
     rotate 60
@@ -50,11 +61,14 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }
 
-/opt/digitalocean-stack/logs/demsausage-staging/cron/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/cron/cron_output.log {
     daily
     missingok
     rotate 60
@@ -63,11 +77,14 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }
 
-/opt/digitalocean-stack/logs/demsausage-staging/webdriver/*.log {
+/opt/digitalocean-stack/logs/demsausage-staging/webdriver/geckodriver.log {
     daily
     missingok
     rotate 60
@@ -76,6 +93,9 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }

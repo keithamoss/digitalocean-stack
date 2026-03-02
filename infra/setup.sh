@@ -54,8 +54,11 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 systemctl is-active --quiet docker || systemctl start docker
 docker --version
 
-# Add non-root user to docker group
-DOCKER_USER="keith"
+# Add non-root user to docker group so they can run docker commands without sudo.
+# The orchestration scripts (orchestration/*.sh) are run as this user, not as root.
+# $SUDO_USER is the user who invoked sudo — guaranteed to be set since this
+# script requires root (checked above) and must be run via sudo, not as root directly.
+DOCKER_USER="${SUDO_USER:?SUDO_USER is not set — run this script with sudo, not as root directly}"
 echo "==> Adding $DOCKER_USER to docker group"
 usermod -aG docker "$DOCKER_USER"
 echo "User $DOCKER_USER added to docker group. They will need to log out and back in for changes to take effect."

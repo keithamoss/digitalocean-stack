@@ -1,8 +1,10 @@
 # Log rotation for pgbackrest logs
 # Logs located at /opt/digitalocean-stack/logs/db/pgbackrest/
 # Format: main-backup-YYYY.MM.DD.log, main-expire-YYYY.MM.DD.log
+# Note: Use specific filenames to avoid rotating already-rotated files
+# Rotated logs are moved to archive/ subdirectory
 
-/opt/digitalocean-stack/logs/db/pgbackrest/*.log {
+/opt/digitalocean-stack/logs/db/pgbackrest/main-backup.log /opt/digitalocean-stack/logs/db/pgbackrest/main-expire.log {
     daily
     missingok
     rotate 60
@@ -11,6 +13,9 @@
     notifempty
     copytruncate
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    olddir archive
+    createolddir 755 root root
 }

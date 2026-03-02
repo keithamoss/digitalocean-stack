@@ -11,104 +11,104 @@
 #
 # Each service has its own block with olddir to move rotated logs into subdirectories
 
-/home/keith/digitalocean-stack/logs/docker/redis.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/redis.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/redis
-    createolddir 755 keith keith
+    olddir redis
+    createolddir 755 root root
 }
 
-/home/keith/digitalocean-stack/logs/docker/demsausage-memcached-1.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/demsausage-memcached-1.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/demsausage-memcached-1
-    createolddir 755 keith keith
+    olddir demsausage-memcached-1
+    createolddir 755 root root
 }
 
-/home/keith/digitalocean-stack/logs/docker/demsausage-rq_dashboard-1.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/demsausage-rq_dashboard-1.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/demsausage-rq_dashboard-1
-    createolddir 755 keith keith
+    olddir demsausage-rq_dashboard-1
+    createolddir 755 root root
 }
 
-/home/keith/digitalocean-stack/logs/docker/pi-hosting-cloudflared-demsausage-org-1.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/pi-hosting-cloudflared-demsausage-org-1.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/pi-hosting-cloudflared-demsausage-org-1
-    createolddir 755 keith keith
+    olddir pi-hosting-cloudflared-demsausage-org-1
+    createolddir 755 root root
 }
 
-/home/keith/digitalocean-stack/logs/docker/pi-hosting-cloudflared-keithmoss-me-1.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/pi-hosting-cloudflared-keithmoss-me-1.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/pi-hosting-cloudflared-keithmoss-me-1
-    createolddir 755 keith keith
+    olddir pi-hosting-cloudflared-keithmoss-me-1
+    createolddir 755 root root
 }
 
-/home/keith/digitalocean-stack/logs/docker/foundry-foundry-1.log {
-    su keith keith
+/opt/digitalocean-stack/logs/docker/foundry-foundry-1.log {
     daily
     rotate 60
     maxage 60
     missingok
     notifempty
+    nocreate
     compress
     delaycompress
     dateext
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
-    olddir /home/keith/digitalocean-stack/logs/docker/foundry-foundry-1
-    createolddir 755 keith keith
+    olddir foundry-foundry-1
+    createolddir 755 root root
 }

@@ -88,6 +88,22 @@ if [[ ${#FAILED_TIMERS[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# Create log directories and grant the stack user full access (read, write, delete).
+# Default ACLs ensure future files created by root/systemd automatically inherit access.
+echo "Setting up log directories..."
+mkdir -p \
+    "$STACK_DIR/logs/backups/postgres-full" \
+    "$STACK_DIR/logs/backups/postgres-diff" \
+    "$STACK_DIR/logs/backups/foundry" \
+    "$STACK_DIR/logs/backups/heartbeat" \
+    "$STACK_DIR/logs/backups/docker-logs" \
+    "$STACK_DIR/logs/docker"
+# Capital X: sets execute on directories but not regular files (preserves correct file modes).
+setfacl -R -m u:"$STACK_USER":rwX "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker"
+# Default ACL on every directory so future root-created files inherit access.
+find "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" -type d -exec setfacl -d -m u:"$STACK_USER":rwx {} +
+echo "  ✓ Log directories created and ACLs applied for $STACK_USER"
+
 echo ""
 echo "✓ Installation complete! All timers are enabled."
 echo ""
