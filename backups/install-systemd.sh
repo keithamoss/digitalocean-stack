@@ -53,6 +53,8 @@ install_unit "${SCRIPT_DIR}/docker/docker-logs-export.service" "${SYSTEMD_DIR}/d
 install_unit "${SCRIPT_DIR}/docker/docker-logs-export.timer" "${SYSTEMD_DIR}/docker-logs-export.timer"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.service" "${SYSTEMD_DIR}/postgresql-log-archive.service"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.timer" "${SYSTEMD_DIR}/postgresql-log-archive.timer"
+install_unit "${STACK_DIR}/infra/backups/backups-log-archive.service" "${SYSTEMD_DIR}/backups-log-archive.service"
+install_unit "${STACK_DIR}/infra/backups/backups-log-archive.timer" "${SYSTEMD_DIR}/backups-log-archive.timer"
 
 # Install failure alert template service (with substitution)
 install_unit "${SCRIPT_DIR}/monitoring/backup-failure-alert@.service" "${SYSTEMD_DIR}/backup-failure-alert@.service"
@@ -71,7 +73,7 @@ fi
 echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer; do
+for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
     else
@@ -123,10 +125,11 @@ echo "  - Daily heartbeat: Daily at 3:30 AM"
 echo ""
 echo "Log maintenance schedule:"
 echo "  - PostgreSQL log archive: Daily at 00:20 (compress + move to archive/)"
+echo "  - Backup log archive:      Daily at 23:55 (compress + move to archive/)"
 echo ""
 echo "IMPORTANT: Timers are enabled but not started to avoid triggering backups during installation."
 echo "They will start automatically on next reboot, or you can start them now:"
-echo "  sudo systemctl start postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer"
+echo "  sudo systemctl start postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers"

@@ -5,6 +5,7 @@
 # Rotated logs are moved to archive/ subdirectories
 
 /opt/digitalocean-stack/logs/demsausage-staging/gunicorn/gunicorn_a.log /opt/digitalocean-stack/logs/demsausage-staging/gunicorn/gunicorn_b.log {
+    su root root
     daily
     missingok
     rotate 60
@@ -21,6 +22,7 @@
 }
 
 /opt/digitalocean-stack/logs/demsausage-staging/rq_workers/rq_workers.log {
+    su root root
     daily
     missingok
     rotate 60
@@ -37,6 +39,7 @@
 }
 
 /opt/digitalocean-stack/logs/demsausage-staging/django/django.log {
+    su root root
     daily
     missingok
     rotate 60
@@ -53,6 +56,7 @@
 }
 
 /opt/digitalocean-stack/logs/demsausage-staging/supervisord/supervisord.log {
+    su root root
     daily
     missingok
     rotate 60
@@ -69,6 +73,7 @@
 }
 
 /opt/digitalocean-stack/logs/demsausage-staging/cron/cron_output.log {
+    su root root
     daily
     missingok
     rotate 60
@@ -85,6 +90,7 @@
 }
 
 /opt/digitalocean-stack/logs/demsausage-staging/webdriver/geckodriver.log {
+    su root root
     daily
     missingok
     rotate 60

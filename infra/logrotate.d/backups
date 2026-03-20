@@ -1,0 +1,11 @@
+# Backup wrapper logs are NOT managed by logrotate.
+#
+# Backup wrappers create pre-dated log files (e.g. diff-backup-YYYY-MM-DD.log),
+# so logrotate's dateext approach would produce double-dated filenames.
+# Compression and archival is handled instead by:
+#   infra/backups/backups-log-archive.sh  (run daily via systemd timer)
+#
+# See also: infra/db/postgresql-log-archive.sh which uses the same approach.
+
+# placeholder — deploy-logrotate.sh requires at least one non-comment line
+# (this file intentionally left with no active rules)

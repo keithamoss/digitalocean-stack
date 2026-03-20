@@ -12,6 +12,7 @@
 # Each service has its own block with olddir to move rotated logs into subdirectories
 
 /opt/digitalocean-stack/logs/docker/redis.log {
+    su root root
     daily
     rotate 60
     maxage 60
@@ -29,6 +30,7 @@
 }
 
 /opt/digitalocean-stack/logs/docker/demsausage-memcached-1.log {
+    su root root
     daily
     rotate 60
     maxage 60
@@ -46,6 +48,7 @@
 }
 
 /opt/digitalocean-stack/logs/docker/demsausage-rq_dashboard-1.log {
+    su root root
     daily
     rotate 60
     maxage 60
@@ -63,6 +66,7 @@
 }
 
 /opt/digitalocean-stack/logs/docker/pi-hosting-cloudflared-demsausage-org-1.log {
+    su root root
     daily
     rotate 60
     maxage 60
@@ -80,6 +84,7 @@
 }
 
 /opt/digitalocean-stack/logs/docker/pi-hosting-cloudflared-keithmoss-me-1.log {
+    su root root
     daily
     rotate 60
     maxage 60
@@ -97,6 +102,7 @@
 }
 
 /opt/digitalocean-stack/logs/docker/foundry-foundry-1.log {
+    su root root
     daily
     rotate 60
     maxage 60

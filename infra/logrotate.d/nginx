@@ -12,6 +12,7 @@
     delaycompress
     notifempty
     dateext
+    dateyesterday
     dateformat -%Y.%m.%d
     extension .log
     olddir archive

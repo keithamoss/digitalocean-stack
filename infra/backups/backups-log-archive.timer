@@ -1,0 +1,16 @@
+[Unit]
+Description=Backup Log Archive Timer
+Requires=backups-log-archive.service
+
+[Timer]
+# Run at 23:55 daily — end of day, before midnight rollover.
+# Backup wrappers write their logs at 3 AM+, so today's log files already exist
+# and are safely identified as the newest (left uncompressed).
+# Unlike postgresql-log-archive (which must run after midnight because PostgreSQL
+# creates the new day's log at 00:00), there is no midnight race condition here.
+OnCalendar=*-*-* 23:55:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

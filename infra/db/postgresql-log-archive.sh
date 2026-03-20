@@ -6,9 +6,12 @@
 # PostgreSQL creates pre-dated log files (postgresql-YYYY-MM-DD.log) on its own schedule,
 # so logrotate's rename-and-date-stamp approach would produce double-dated filenames.
 # Instead, this script runs daily via systemd timer and:
-#   1. Compresses all log files except today's active log
+#   1. Compresses all log files except the most recently modified one
 #   2. Moves compressed logs to the archive/ subdirectory
 #   3. Deletes archives older than the retention period
+#
+# Using newest-by-mtime (not today's date) is more robust — e.g. if the timer
+# fires before PostgreSQL has created today's file.
 #
 # Produces: logs/db/postgresql/archive/postgresql-YYYY-MM-DD.log.gz
 
@@ -21,25 +24,37 @@ LOG_DIR="$STACK_DIR/logs/db/postgresql"
 ARCHIVE_DIR="$LOG_DIR/archive"
 RETAIN_DAYS=60
 
-TODAY=$(date +%Y-%m-%d)
-
 echo "=== PostgreSQL Log Archive Started ==="
-echo "Log directory : $LOG_DIR"
+echo "Log directory    : $LOG_DIR"
 echo "Archive directory: $ARCHIVE_DIR"
 echo "Retaining archives for $RETAIN_DAYS days"
-echo "Today's date (excluded from archiving): $TODAY"
 echo ""
 
 # Ensure archive directory exists
 mkdir -p "$ARCHIVE_DIR"
 
-# Step 1: Compress all dated log files except today's active log
+# Find the most recently modified log file — this one is left uncompressed
+NEWEST=$(find "$LOG_DIR" -maxdepth 1 -name "postgresql-*.log" -printf '%T@ %p\n' 2>/dev/null \
+    | sort -n | tail -1 | cut -d' ' -f2-)
+
+if [[ -z "$NEWEST" ]]; then
+    echo "No log files found, nothing to do."
+    echo ""
+    echo "=== PostgreSQL Log Archive Complete ==="
+    exit 0
+fi
+
+echo "Keeping uncompressed: $(basename "$NEWEST")"
+echo ""
+
+# Step 1: Compress all dated log files except the newest
 COMPRESSED=0
 while IFS= read -r -d '' log_file; do
+    [[ "$log_file" == "$NEWEST" ]] && continue
     echo "Compressing: $(basename "$log_file")"
     gzip -q "$log_file"
     COMPRESSED=$((COMPRESSED + 1))
-done < <(find "$LOG_DIR" -maxdepth 1 -name "postgresql-*.log" ! -name "postgresql-${TODAY}.log" -print0)
+done < <(find "$LOG_DIR" -maxdepth 1 -name "postgresql-*.log" -print0)
 
 echo "Compressed $COMPRESSED file(s)"
 echo ""

@@ -5,6 +5,7 @@
 # Rotated logs are moved to archive/ subdirectory
 
 /opt/digitalocean-stack/logs/db/pgbackrest/main-backup.log /opt/digitalocean-stack/logs/db/pgbackrest/main-expire.log {
+    su root root
     daily
     missingok
     rotate 60
