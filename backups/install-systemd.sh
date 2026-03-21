@@ -44,6 +44,7 @@ echo "Copying and configuring service files..."
 install_unit "${SCRIPT_DIR}/postgres/diff/postgres-diff-backup.service" "${SYSTEMD_DIR}/postgres-diff-backup.service"
 install_unit "${SCRIPT_DIR}/postgres/full/postgres-full-backup.service" "${SYSTEMD_DIR}/postgres-full-backup.service"
 install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.service" "${SYSTEMD_DIR}/backup-heartbeat.service"
+install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.timer" "${SYSTEMD_DIR}/backup-heartbeat.timer"
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
 install_unit "${SCRIPT_DIR}/docker/docker-logs-export.service" "${SYSTEMD_DIR}/docker-logs-export.service"
 install_unit "${SCRIPT_DIR}/logs/logs-backup.service" "${SYSTEMD_DIR}/logs-backup.service"
@@ -72,7 +73,7 @@ fi
 echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in consolidated-backup.timer postgresql-log-archive.timer backups-log-archive.timer; do
+for timer in consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
     else
@@ -120,7 +121,8 @@ echo "  User: $STACK_USER"
 echo ""
 echo "Backup schedule:"
 echo "  - Consolidated orchestration: Daily at 3:00 AM"
-echo "    Order: PostgreSQL (Sun=full, otherwise diff) -> Foundry -> Docker logs -> Logs S3 -> Configs S3 -> Heartbeat"
+echo "    Order: PostgreSQL (Sun=full, otherwise diff) -> Foundry -> Docker logs -> Logs S3 -> Configs S3"
+echo "  - Backup heartbeat: Daily at 3:30 AM (separate timer)"
 echo ""
 echo "Log maintenance schedule:"
 echo "  - PostgreSQL log archive: Daily at 00:20 (compress + move to archive/)"
@@ -128,7 +130,7 @@ echo "  - Backup log archive:      Daily at 23:55 (compress + move to archive/)"
 echo ""
 echo "IMPORTANT: Timers are enabled but not started to avoid triggering backups during installation."
 echo "They will start automatically on next reboot, or you can start them now:"
-echo "  sudo systemctl start consolidated-backup.timer postgresql-log-archive.timer backups-log-archive.timer"
+echo "  sudo systemctl start consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Consolidated Backup Orchestration Runner
-# Runs all backup phases in sequence and triggers a final heartbeat summary
+# Runs all backup phases in sequence
 
 set -euo pipefail
 
@@ -51,7 +51,7 @@ log "=== Consolidated Backup Run Started ==="
 log "Log file: $LOG_FILE"
 log "Selected PostgreSQL phase: ${POSTGRES_PHASE}"
 log ""
-log "Execution order: PostgreSQL -> Foundry -> Docker logs export -> Logs backup -> Configs backup -> Heartbeat"
+log "Execution order: PostgreSQL -> Foundry -> Docker logs export -> Logs backup -> Configs backup"
 
 # Run all phases in sequence, continue even if one fails
 run_phase "$POSTGRES_PHASE" "$POSTGRES_SERVICE" || true
@@ -59,17 +59,6 @@ run_phase "Foundry Backup" "foundry-backup.service" || true
 run_phase "Docker Logs Export" "docker-logs-export.service" || true
 run_phase "Logs Backup" "logs-backup.service" || true
 run_phase "Configs Backup" "configs-backup.service" || true
-
-# Always run final summary report
-log ""
-log "--- Phase: Summary Heartbeat ---"
-if run_with_logging "Summary Heartbeat" systemctl start backup-heartbeat.service; then
-    log "✓ Summary heartbeat completed"
-else
-    exit_code=$?
-    log "✗ Summary heartbeat failed (exit: ${exit_code})"
-    FAILED_PHASES+=("Summary Heartbeat")
-fi
 
 # Final consolidated summary
 log ""

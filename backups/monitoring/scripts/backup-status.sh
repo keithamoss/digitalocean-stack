@@ -201,6 +201,66 @@ format_bytes() {
     fi
 }
 
+# get_consolidated_success_stats
+#
+# Calculates 30-day consolidated backup run success metrics from wrapper log files.
+#
+# Globals Set:
+#   CONSOLIDATED_RUNS_30D - Total runs in the last 30 days
+#   CONSOLIDATED_SUCCESS_30D - Successful runs in the last 30 days
+#   CONSOLIDATED_FAILED_30D - Failed runs in the last 30 days
+#   CONSOLIDATED_UNKNOWN_30D - Runs without final status marker
+#   CONSOLIDATED_SUCCESS_RATE_30D - Success percentage (0.0-100.0)
+get_consolidated_success_stats() {
+    local consolidated_log_dir="${STACK_DIR}/logs/backups/consolidated"
+    local cutoff_epoch
+    cutoff_epoch=$(date -d '30 days ago' +%s)
+
+    CONSOLIDATED_RUNS_30D=0
+    CONSOLIDATED_SUCCESS_30D=0
+    CONSOLIDATED_FAILED_30D=0
+    CONSOLIDATED_UNKNOWN_30D=0
+    CONSOLIDATED_SUCCESS_RATE_30D="0.0"
+
+    if [[ ! -d "$consolidated_log_dir" ]]; then
+        return 0
+    fi
+
+    local log_file
+    for log_file in "$consolidated_log_dir"/run-*.log; do
+        if [[ ! -f "$log_file" ]]; then
+            continue
+        fi
+
+        local basename log_date file_epoch
+        basename=$(basename "$log_file")
+        log_date="${basename#run-}"
+        log_date="${log_date%.log}"
+
+        if ! file_epoch=$(date -d "$log_date" +%s 2>/dev/null); then
+            continue
+        fi
+
+        if ((file_epoch < cutoff_epoch)); then
+            continue
+        fi
+
+        ((CONSOLIDATED_RUNS_30D += 1))
+
+        if grep -q "Consolidated backup run completed successfully" "$log_file"; then
+            ((CONSOLIDATED_SUCCESS_30D += 1))
+        elif grep -q "Consolidated backup run completed with failures" "$log_file"; then
+            ((CONSOLIDATED_FAILED_30D += 1))
+        else
+            ((CONSOLIDATED_UNKNOWN_30D += 1))
+        fi
+    done
+
+    if ((CONSOLIDATED_RUNS_30D > 0)); then
+        CONSOLIDATED_SUCCESS_RATE_30D=$(awk "BEGIN {printf \"%.1f\", (${CONSOLIDATED_SUCCESS_30D} / ${CONSOLIDATED_RUNS_30D}) * 100}")
+    fi
+}
+
 # Main status check - console output
 main() {
     echo -e "${BLUE}=== Backup Status ===${NC}\n"
@@ -235,6 +295,21 @@ main() {
     # Configs Backup Status
     if ! display_configs_status; then
         configs_status=1
+    fi
+
+    # 30-day consolidated success rate (subset scope)
+    get_consolidated_success_stats
+    echo -e "\n${BLUE}=== Consolidated Reliability (30d, Subset Scope) ===${NC}"
+    echo -e "${BLUE}    Scope:${NC} Consolidated run only (PostgreSQL -> Foundry -> Docker logs export -> Logs S3 -> Configs S3)"
+    echo -e "${BLUE}    Excludes:${NC} Standalone timers/services (e.g., heartbeat + log-archive timers)"
+    if ((CONSOLIDATED_RUNS_30D > 0)); then
+        echo -e "${GREEN}✓ Success Rate:${NC}      ${CONSOLIDATED_SUCCESS_RATE_30D}% (${CONSOLIDATED_SUCCESS_30D}/${CONSOLIDATED_RUNS_30D})"
+        echo -e "${GREEN}✓ Failed Runs:${NC}       ${CONSOLIDATED_FAILED_30D}"
+        if ((CONSOLIDATED_UNKNOWN_30D > 0)); then
+            echo -e "${YELLOW}⚠ Unknown Outcomes:${NC}  ${CONSOLIDATED_UNKNOWN_30D}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ No consolidated run logs found for the last 30 days${NC}"
     fi
     
     # Overall status - Issue 17
@@ -597,6 +672,22 @@ heartbeat() {
     status_lines+=("")
     status_lines+=("**Storage**")
     status_lines+=("✓ S3 Repos: Operational")
+
+    # 30-day consolidated success rate (subset scope)
+    get_consolidated_success_stats
+    status_lines+=("")
+    status_lines+=("**Reliability (30d, subset scope)**")
+    status_lines+=("Scope: Consolidated run only (PostgreSQL -> Foundry -> Docker logs export -> Logs S3 -> Configs S3)")
+    status_lines+=("Excludes: Standalone timers/services (e.g., heartbeat + log-archive timers)")
+    if ((CONSOLIDATED_RUNS_30D > 0)); then
+        status_lines+=("✓ Consolidated success rate: \`${CONSOLIDATED_SUCCESS_RATE_30D}%\` (${CONSOLIDATED_SUCCESS_30D}/${CONSOLIDATED_RUNS_30D})")
+        status_lines+=("✓ Failed runs: \`${CONSOLIDATED_FAILED_30D}\`")
+        if ((CONSOLIDATED_UNKNOWN_30D > 0)); then
+            status_lines+=("⚠ Unknown outcomes: \`${CONSOLIDATED_UNKNOWN_30D}\`")
+        fi
+    else
+        status_lines+=("⚠ No consolidated run logs found in the last 30 days")
+    fi
     
     # Check for specific issues - Issue 1,2,10,12,13
     local has_warnings=0
