@@ -1,0 +1,40 @@
+[Unit]
+Description=Configs Backup to S3
+After=network-online.target
+Wants=network-online.target
+OnFailure=backup-failure-alert@configs-backup.service
+
+[Service]
+Type=oneshot
+# Run as stack user to access secrets and restic cache without permission issues
+User=@STACK_USER@
+Group=@STACK_USER@
+WorkingDirectory=@STACK_DIR@/backups/configs
+
+# Run backup via wrapper script
+ExecStart=@STACK_DIR@/backups/configs/backup-wrapper.sh
+
+# Timeout after 10 minutes (configs are tiny, should be very fast)
+TimeoutStartSec=600
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=configs-backup
+
+# Restart policy
+Restart=no
+
+# Resource limits
+CPUQuota=50%
+MemoryMax=512M
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs /home/@STACK_USER@/.cache/restic
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Configs Backup to S3 Timer
+Requires=configs-backup.service
+
+[Timer]
+# Run at 3:25 AM daily (5 minutes after Logs backup at 3:20, 5 minutes before Heartbeat at 3:30)
+OnCalendar=*-*-* 03:25:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

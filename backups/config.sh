@@ -16,6 +16,7 @@ export S3_BUCKET_PREFIX="jig-ho-cottage-dr"
 # Restic Configuration
 export FOUNDRY_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/foundry"
 export LOGS_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/logs"
+export CONFIGS_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/configs"
 
 # Prevent multiple sourcing
 if [[ -n "${BACKUP_CONFIG_LOADED:-}" ]]; then
@@ -30,6 +31,7 @@ export MAX_FULL_BACKUP_AGE=691200           # 8 days (weekly full backups with 1
 export WAL_FAILURE_WINDOW=604800            # 7 days to check for WAL failures
 export FOUNDRY_BACKUP_STALE_HOURS=30        # Hours before Foundry backup considered stale
 export LOGS_BACKUP_STALE_HOURS=30           # Hours before logs backup considered stale
+export CONFIGS_BACKUP_STALE_HOURS=30        # Hours before configs backup considered stale
 export COMMAND_TIMEOUT=60                   # Timeout for external commands (seconds)
 
 # Retention Policy Configuration (Issue 17)
@@ -41,6 +43,10 @@ export PG_EXPECTED_MAX_AGE_DAYS=400         # 52 weeks + ~5 weeks buffer
 export FOUNDRY_RETENTION_DAILY=30           # Keep 30 daily snapshots
 export FOUNDRY_RETENTION_MONTHLY=12         # Keep 12 monthly snapshots
 export FOUNDRY_EXPECTED_MAX_AGE_DAYS=450    # ~14 months + ~1 month buffer
+
+# Configs: Must match backups/configs/configs-backup.sh retention policy
+export CONFIGS_RETENTION_DAILY=30           # Keep 30 daily snapshots
+export CONFIGS_RETENTION_MONTHLY=9999       # Keep monthly forever (effectively unlimited)
 
 # Exit Codes (Issue 17)
 export EXIT_SUCCESS=0

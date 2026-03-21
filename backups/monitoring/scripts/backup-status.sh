@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -44,6 +44,8 @@ export FOUNDRY_AWS_ENV="${SECRETS_DIR}/aws.env"
 export FOUNDRY_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 export LOGS_AWS_ENV="${SECRETS_DIR}/aws.env"
 export LOGS_RESTIC_KEY="${SECRETS_DIR}/restic.key"
+export CONFIGS_AWS_ENV="${SECRETS_DIR}/aws.env"
+export CONFIGS_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 
 # get_most_recent_log
 #
@@ -206,6 +208,7 @@ main() {
     local pg_status=0
     local foundry_status=0
     local logs_status=0
+    local configs_status=0
     
     # PostgreSQL Backup Status
     local pg_info
@@ -228,12 +231,17 @@ main() {
     if ! display_logs_status; then
         logs_status=1
     fi
+
+    # Configs Backup Status
+    if ! display_configs_status; then
+        configs_status=1
+    fi
     
     # Overall status - Issue 17
-    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)); then
+    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)) && ((configs_status == 0)); then
         echo -e "\n${GREEN}✓ All backup systems operational${NC}"
         return $EXIT_SUCCESS
-    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)); then
+    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)) || ((configs_status == 2)); then
         echo -e "\n${RED}✗ Critical backup system errors detected${NC}"
         return $EXIT_ERROR
     else
@@ -250,6 +258,7 @@ heartbeat() {
     local pg_info
     local foundry_check_result=0  # Issue 1,10: Use consistent 0=success convention
     local logs_check_result=0
+    local configs_check_result=0
     local now
     now=$(date +%s)
     local exit_code=$EXIT_SUCCESS  # Track overall exit code - Issue 17
@@ -331,6 +340,16 @@ heartbeat() {
         logs_check_result=1
         echo "ERROR: Logs backup check failed" >&2
         echo "Error output: ${logs_info}" >&2
+    fi
+
+    # Check Configs backups
+    local configs_info
+    if configs_info=$(validate_configs_backup_system 2>&1); then
+        get_configs_backup_stats "$configs_info"
+    else
+        configs_check_result=1
+        echo "ERROR: Configs backup check failed" >&2
+        echo "Error output: ${configs_info}" >&2
     fi
 
     # Robust differential backup check using timestamp (Issue 1, 2, 3, 5, 8)
@@ -539,6 +558,42 @@ heartbeat() {
         exit_code=$EXIT_ERROR
     fi
 
+    # Add Configs status
+    status_lines+=("")
+    status_lines+=("**Configs (restic)**")
+
+    if ((configs_check_result == 0)) && [[ -n "${CONFIGS_SNAPSHOT_TIME:-}" ]] && \
+       validate_numeric "${CONFIGS_SNAPSHOT_TIME}" "CONFIGS_SNAPSHOT_TIME" 2>/dev/null; then
+        local configs_time=$(date -d "@${CONFIGS_SNAPSHOT_TIME}" '+%Y-%m-%d %H:%M:%S')
+        local configs_size=$(format_bytes "${CONFIGS_SNAPSHOT_SIZE:-0}")
+
+        local configs_age_display="${CONFIGS_AGE_HOURS:-unknown}h"
+        if [[ -n "${CONFIGS_AGE_HOURS:-}" ]] && [[ "${CONFIGS_AGE_HOURS}" =~ ^[0-9]+$ ]]; then
+            configs_age_display="${CONFIGS_AGE_HOURS}h ago"
+        fi
+
+        status_lines+=("✓ Last backup: \`${configs_time}\` (${configs_age_display})")
+        local configs_file_display="${CONFIGS_SNAPSHOT_FILES:-unknown}"
+        if [[ -n "${CONFIGS_FILE_DELTA:-}" ]] && [[ "${CONFIGS_FILE_DELTA}" =~ ^-?[0-9]+$ ]] && [[ "${CONFIGS_FILE_DELTA}" != "0" ]]; then
+            if [[ "${CONFIGS_FILE_DELTA}" -gt 0 ]]; then
+                configs_file_display="${CONFIGS_SNAPSHOT_FILES:-unknown} (+${CONFIGS_FILE_DELTA})"
+            else
+                configs_file_display="${CONFIGS_SNAPSHOT_FILES:-unknown} (${CONFIGS_FILE_DELTA})"
+            fi
+        fi
+        status_lines+=("✓ Files: \`${configs_file_display}\`")
+        status_lines+=("✓ Size: \`${configs_size}\`")
+        status_lines+=("✓ Snapshots: \`${CONFIGS_TOTAL_SNAPSHOTS:-unknown}\` (30 daily + monthly forever)")
+    else
+        status_lines+=("✗ Failed to retrieve backup information")
+        if [[ -n "${configs_info:-}" ]]; then
+            local configs_error_preview="${configs_info:0:500}"
+            status_lines+=("**Error:** \`${configs_error_preview}\`")
+        fi
+        status_lines+=("**Debug:** Check restic repo: \`restic -r ${CONFIGS_RESTIC_REPO} snapshots\`")
+        exit_code=$EXIT_ERROR
+    fi
+
     status_lines+=("")
     status_lines+=("**Storage**")
     status_lines+=("✓ S3 Repos: Operational")
@@ -590,6 +645,18 @@ heartbeat() {
             warning_lines+=("**TIMEOUT:** Logs backup exceeded systemd timeout limit.")
             warning_lines+=("**Action:** Review logs: \`journalctl -u logs-backup.service -n 100\`")
             warning_lines+=("**Action:** Consider increasing TimeoutStartSec in logs-backup.service if backups are legitimately slow.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
+
+    # Check for timeout in Configs backup
+    local configs_backup_log
+    if configs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/configs-backup" "backup"); then
+        if check_for_timeout_in_log "$configs_backup_log"; then
+            warning_lines+=("**TIMEOUT:** Configs backup exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u configs-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in configs-backup.service if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -646,6 +713,25 @@ heartbeat() {
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${LOGS_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Logs backup is stale (older than ${LOGS_BACKUP_STALE_HOURS} hours).")
+            warning_lines+=("**Action:** Verify backup schedule and check for failures.")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+        fi
+        has_warnings=1
+    fi
+
+    # Check Configs backup
+    if ((configs_check_result != 0)) || \
+       [[ -z "${CONFIGS_SNAPSHOT_TIME:-}" ]] || \
+       ! validate_numeric "${CONFIGS_SNAPSHOT_TIME}" "CONFIGS_SNAPSHOT_TIME" 2>/dev/null || \
+       [[ "${CONFIGS_STATUS:-}" == "Stale" ]]; then
+
+        if ((configs_check_result != 0)) || [[ -z "${CONFIGS_SNAPSHOT_TIME:-}" ]]; then
+            warning_lines+=("**Warning:** Configs backup check failed or no backup data available.")
+            warning_lines+=("**Action:** Check systemd timer: \`systemctl status configs-backup.timer\`")
+            warning_lines+=("**Logs:** \`journalctl -u configs-backup.service -n 50\`")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
+        elif [[ "${CONFIGS_STATUS:-}" == "Stale" ]]; then
+            warning_lines+=("**Warning:** Configs backup is stale (older than ${CONFIGS_BACKUP_STALE_HOURS} hours).")
             warning_lines+=("**Action:** Verify backup schedule and check for failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
         fi
