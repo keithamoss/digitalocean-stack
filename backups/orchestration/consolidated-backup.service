@@ -1,0 +1,39 @@
+[Unit]
+Description=Consolidated Backup Orchestration Runner
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+OnFailure=backup-failure-alert@consolidated-backup.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=@STACK_DIR@/backups/orchestration
+
+# Run consolidated orchestration script
+ExecStart=@STACK_DIR@/backups/orchestration/consolidated-backup.sh
+
+# Allow enough time for full Sunday backups + all downstream phases
+TimeoutStartSec=5400
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=consolidated-backup
+
+# Restart policy
+Restart=no
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=75%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs/backups
+
+[Install]
+WantedBy=multi-user.target

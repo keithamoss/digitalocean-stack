@@ -30,6 +30,46 @@ error() {
     exit 1
 }
 
+# run_restic_forget_with_self_heal
+#
+# Runs restic forget/prune and self-heals once if a stale lock is encountered
+run_restic_forget_with_self_heal() {
+    local forget_output
+
+    if forget_output=$(restic -r "$RESTIC_REPO" forget \
+        --tag foundry \
+        --keep-daily "$FOUNDRY_RETENTION_DAILY" \
+        --keep-monthly "$FOUNDRY_RETENTION_MONTHLY" \
+        --prune 2>&1); then
+        echo "$forget_output"
+        return 0
+    fi
+
+    echo "$forget_output"
+
+    if grep -q "repository is already locked" <<< "$forget_output"; then
+        echo ""
+        echo "⚠ Detected restic repository lock; attempting self-heal with unlock + retry..."
+
+        if unlock_output=$(restic -r "$RESTIC_REPO" unlock 2>&1); then
+            echo "$unlock_output"
+        else
+            echo "$unlock_output"
+            error "Failed to unlock restic repository during self-heal"
+        fi
+
+        echo "Retrying retention policy..."
+        restic -r "$RESTIC_REPO" forget \
+            --tag foundry \
+            --keep-daily "$FOUNDRY_RETENTION_DAILY" \
+            --keep-monthly "$FOUNDRY_RETENTION_MONTHLY" \
+            --prune
+        return 0
+    fi
+
+    error "Retention policy failed"
+}
+
 # Source AWS credentials
 [[ -f "$BACKUPS_DIR/secrets/aws.env" ]] || error "AWS credentials file not found: $BACKUPS_DIR/secrets/aws.env"
 source "$BACKUPS_DIR/secrets/aws.env"
@@ -105,11 +145,7 @@ if restic -r "$RESTIC_REPO" backup \
     #   FOUNDRY_RETENTION_DAILY and FOUNDRY_RETENTION_MONTHLY constants
     echo ""
     echo "Applying retention policy (${FOUNDRY_RETENTION_DAILY} daily, ${FOUNDRY_RETENTION_MONTHLY} monthly)..."
-    restic -r "$RESTIC_REPO" forget \
-        --tag foundry \
-        --keep-daily "$FOUNDRY_RETENTION_DAILY" \
-        --keep-monthly "$FOUNDRY_RETENTION_MONTHLY" \
-        --prune
+    run_restic_forget_with_self_heal
     
     echo ""
     echo "Repository statistics:"

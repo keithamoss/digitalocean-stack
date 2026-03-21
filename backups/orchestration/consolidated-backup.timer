@@ -1,0 +1,12 @@
+[Unit]
+Description=Consolidated Backup Orchestration Timer (Daily at 3 AM)
+Requires=consolidated-backup.service
+
+[Timer]
+# Run daily at 3:00 AM; orchestration script handles sequencing and Sunday full backup switch
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target
