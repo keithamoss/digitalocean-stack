@@ -266,8 +266,7 @@ display_foundry_status() {
     fi
     echo -e "${GREEN}✓ Last backup:${NC}        $(date -d "@$FOUNDRY_SNAPSHOT_TIME" '+%Y-%m-%d %H:%M:%S')"
     echo -e "${GREEN}✓ Size:${NC}               $(format_bytes $FOUNDRY_SNAPSHOT_SIZE)"
-    echo -e "${GREEN}✓ Worlds backed up:${NC}   $FOUNDRY_WORLD_COUNT"
-    echo -e "${GREEN}✓ Systems/Modules:${NC}    $FOUNDRY_SYSTEMS_COUNT systems, $FOUNDRY_MODULES_COUNT modules"
+    echo -e "${GREEN}✓ Files:${NC}              $FOUNDRY_SNAPSHOT_FILES"
     
     local oldest_age_days=$(( ($(date +%s) - FOUNDRY_OLDEST_SNAPSHOT_TIME) / 86400 ))
     if [[ "${FOUNDRY_PRUNING_STATUS}" == "Warning" ]]; then

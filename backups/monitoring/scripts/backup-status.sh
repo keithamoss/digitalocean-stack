@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -42,6 +42,8 @@ done
 # Set configuration for sub-modules (now using values from config.sh)
 export FOUNDRY_AWS_ENV="${SECRETS_DIR}/aws.env"
 export FOUNDRY_RESTIC_KEY="${SECRETS_DIR}/restic.key"
+export LOGS_AWS_ENV="${SECRETS_DIR}/aws.env"
+export LOGS_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 
 # get_most_recent_log
 #
@@ -203,6 +205,7 @@ main() {
     
     local pg_status=0
     local foundry_status=0
+    local logs_status=0
     
     # PostgreSQL Backup Status
     local pg_info
@@ -220,12 +223,17 @@ main() {
     if ! display_foundry_status; then
         foundry_status=1
     fi
+
+    # Logs Backup Status
+    if ! display_logs_status; then
+        logs_status=1
+    fi
     
     # Overall status - Issue 17
-    if ((pg_status == 0)) && ((foundry_status == 0)); then
+    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)); then
         echo -e "\n${GREEN}✓ All backup systems operational${NC}"
         return $EXIT_SUCCESS
-    elif ((pg_status == 2)) || ((foundry_status == 2)); then
+    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)); then
         echo -e "\n${RED}✗ Critical backup system errors detected${NC}"
         return $EXIT_ERROR
     else
@@ -241,6 +249,7 @@ heartbeat() {
     # Declare all variables at function scope (Issue 18, 19)
     local pg_info
     local foundry_check_result=0  # Issue 1,10: Use consistent 0=success convention
+    local logs_check_result=0
     local now
     now=$(date +%s)
     local exit_code=$EXIT_SUCCESS  # Track overall exit code - Issue 17
@@ -312,6 +321,16 @@ heartbeat() {
         # Log the actual error for debugging
         echo "ERROR: Foundry backup check failed" >&2
         echo "Error output: ${foundry_info}" >&2
+    fi
+
+    # Check Logs backups
+    local logs_info
+    if logs_info=$(validate_logs_backup_system 2>&1); then
+        get_logs_backup_stats "$logs_info"
+    else
+        logs_check_result=1
+        echo "ERROR: Logs backup check failed" >&2
+        echo "Error output: ${logs_info}" >&2
     fi
 
     # Robust differential backup check using timestamp (Issue 1, 2, 3, 5, 8)
@@ -492,6 +511,34 @@ heartbeat() {
         exit_code=$EXIT_ERROR
     fi
     
+    # Add Logs status
+    status_lines+=("")
+    status_lines+=("**Logs (restic)**")
+
+    if ((logs_check_result == 0)) && [[ -n "${LOGS_SNAPSHOT_TIME:-}" ]] && \
+       validate_numeric "${LOGS_SNAPSHOT_TIME}" "LOGS_SNAPSHOT_TIME" 2>/dev/null; then
+        local logs_time=$(date -d "@${LOGS_SNAPSHOT_TIME}" '+%Y-%m-%d %H:%M:%S')
+        local logs_size=$(format_bytes "${LOGS_SNAPSHOT_SIZE:-0}")
+
+        local logs_age_display="${LOGS_AGE_HOURS:-unknown}h"
+        if [[ -n "${LOGS_AGE_HOURS:-}" ]] && [[ "${LOGS_AGE_HOURS}" =~ ^[0-9]+$ ]]; then
+            logs_age_display="${LOGS_AGE_HOURS}h ago"
+        fi
+
+        status_lines+=("✓ Last backup: \`${logs_time}\` (${logs_age_display})")
+        status_lines+=("✓ Size: \`${logs_size}\`")
+        status_lines+=("✓ Snapshots: \`${LOGS_TOTAL_SNAPSHOTS:-unknown}\` (retained forever)")
+        status_lines+=("✓ Total files stored: \`${LOGS_TOTAL_FILES:-unknown}\` (unique across all snapshots)")
+    else
+        status_lines+=("✗ Failed to retrieve backup information")
+        if [[ -n "${logs_info:-}" ]]; then
+            local logs_error_preview="${logs_info:0:500}"
+            status_lines+=("**Error:** \`${logs_error_preview}\`")
+        fi
+        status_lines+=("**Debug:** Check restic repo: \`restic -r ${LOGS_RESTIC_REPO} snapshots\`")
+        exit_code=$EXIT_ERROR
+    fi
+
     status_lines+=("")
     status_lines+=("**Storage**")
     status_lines+=("✓ S3 Repos: Operational")
@@ -535,6 +582,18 @@ heartbeat() {
             exit_code=$EXIT_ERROR
         fi
     fi
+
+    # Check for timeout in Logs backup
+    local logs_backup_log
+    if logs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/logs-backup" "backup"); then
+        if check_for_timeout_in_log "$logs_backup_log"; then
+            warning_lines+=("**TIMEOUT:** Logs backup exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u logs-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in logs-backup.service if backups are legitimately slow.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
     
     # Check full backup status - Issue 1
     if ((full_backup_status != 0)); then
@@ -568,6 +627,25 @@ heartbeat() {
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${FOUNDRY_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Foundry backup is stale (older than ${FOUNDRY_BACKUP_STALE_HOURS} hours).")
+            warning_lines+=("**Action:** Verify backup schedule and check for failures.")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+        fi
+        has_warnings=1
+    fi
+
+    # Check Logs backup
+    if ((logs_check_result != 0)) || \
+       [[ -z "${LOGS_SNAPSHOT_TIME:-}" ]] || \
+       ! validate_numeric "${LOGS_SNAPSHOT_TIME}" "LOGS_SNAPSHOT_TIME" 2>/dev/null || \
+       [[ "${LOGS_STATUS:-}" == "Stale" ]]; then
+
+        if ((logs_check_result != 0)) || [[ -z "${LOGS_SNAPSHOT_TIME:-}" ]]; then
+            warning_lines+=("**Warning:** Logs backup check failed or no backup data available.")
+            warning_lines+=("**Action:** Check systemd timer: \`systemctl status logs-backup.timer\`")
+            warning_lines+=("**Logs:** \`journalctl -u logs-backup.service -n 50\`")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
+        elif [[ "${LOGS_STATUS:-}" == "Stale" ]]; then
+            warning_lines+=("**Warning:** Logs backup is stale (older than ${LOGS_BACKUP_STALE_HOURS} hours).")
             warning_lines+=("**Action:** Verify backup schedule and check for failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
         fi

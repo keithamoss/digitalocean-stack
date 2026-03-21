@@ -15,6 +15,7 @@ export S3_BUCKET_PREFIX="jig-ho-cottage-dr"
 
 # Restic Configuration
 export FOUNDRY_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/foundry"
+export LOGS_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/logs"
 
 # Prevent multiple sourcing
 if [[ -n "${BACKUP_CONFIG_LOADED:-}" ]]; then
@@ -28,6 +29,7 @@ export MAX_DIFF_BACKUP_AGE=129600           # 36 hours (1.5 days buffer for dail
 export MAX_FULL_BACKUP_AGE=691200           # 8 days (weekly full backups with 1 day buffer)
 export WAL_FAILURE_WINDOW=604800            # 7 days to check for WAL failures
 export FOUNDRY_BACKUP_STALE_HOURS=30        # Hours before Foundry backup considered stale
+export LOGS_BACKUP_STALE_HOURS=30           # Hours before logs backup considered stale
 export COMMAND_TIMEOUT=60                   # Timeout for external commands (seconds)
 
 # Retention Policy Configuration (Issue 17)

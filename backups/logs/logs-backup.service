@@ -1,0 +1,37 @@
+[Unit]
+Description=Logs Backup to S3
+After=network-online.target
+Wants=network-online.target
+OnFailure=backup-failure-alert@logs-backup.service
+
+[Service]
+Type=oneshot
+# Run as stack user to access log files and restic cache without permission issues
+User=@STACK_USER@
+Group=@STACK_USER@
+WorkingDirectory=@STACK_DIR@/backups/logs
+
+# Run backup via wrapper script
+ExecStart=@STACK_DIR@/backups/logs/backup-wrapper.sh
+
+# Timeout after 20 minutes (logs can be large)
+TimeoutStartSec=1200
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=logs-backup
+
+# Restart policy
+Restart=no
+
+# Resource limits
+CPUQuota=50%
+MemoryMax=2G
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs /home/@STACK_USER@/.cache/restic

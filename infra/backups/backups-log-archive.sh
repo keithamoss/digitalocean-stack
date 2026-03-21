@@ -16,6 +16,7 @@
 #   logs/backups/docker-logs/   docker-logs-export_*.log
 #   logs/backups/foundry/       backup-*.log
 #   logs/backups/heartbeat/     heartbeat-*.log
+#   logs/backups/logs-backup/   backup-*.log
 #   logs/backups/postgres-diff/ diff-backup-*.log
 #   logs/backups/postgres-full/ full-backup-*.log
 
@@ -107,6 +108,7 @@ archive_logs() {
 archive_logs "$BACKUPS_LOG_DIR/docker-logs"   "docker-logs-export_*.log"
 archive_logs "$BACKUPS_LOG_DIR/foundry"        "backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/heartbeat"      "heartbeat-*.log"
+archive_logs "$BACKUPS_LOG_DIR/logs-backup"    "backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-diff"  "diff-backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-full"  "full-backup-*.log"
 

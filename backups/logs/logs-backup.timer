@@ -1,0 +1,12 @@
+[Unit]
+Description=Logs Backup to S3 Timer
+Requires=logs-backup.service
+
+[Timer]
+# Run at 3:20 AM daily (10 minutes after Docker log export at 3:15)
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

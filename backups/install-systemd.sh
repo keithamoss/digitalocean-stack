@@ -51,6 +51,8 @@ install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foun
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.timer" "${SYSTEMD_DIR}/foundry-backup.timer"
 install_unit "${SCRIPT_DIR}/docker/docker-logs-export.service" "${SYSTEMD_DIR}/docker-logs-export.service"
 install_unit "${SCRIPT_DIR}/docker/docker-logs-export.timer" "${SYSTEMD_DIR}/docker-logs-export.timer"
+install_unit "${SCRIPT_DIR}/logs/logs-backup.service" "${SYSTEMD_DIR}/logs-backup.service"
+install_unit "${SCRIPT_DIR}/logs/logs-backup.timer" "${SYSTEMD_DIR}/logs-backup.timer"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.service" "${SYSTEMD_DIR}/postgresql-log-archive.service"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.timer" "${SYSTEMD_DIR}/postgresql-log-archive.timer"
 install_unit "${STACK_DIR}/infra/backups/backups-log-archive.service" "${SYSTEMD_DIR}/backups-log-archive.service"
@@ -73,7 +75,7 @@ fi
 echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer; do
+for timer in postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer logs-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
     else
@@ -101,6 +103,7 @@ mkdir -p \
     "$STACK_DIR/logs/backups/foundry" \
     "$STACK_DIR/logs/backups/heartbeat" \
     "$STACK_DIR/logs/backups/docker-logs" \
+    "$STACK_DIR/logs/backups/logs-backup" \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"
 # Capital X: sets execute on directories but not regular files (preserves correct file modes).
@@ -121,6 +124,7 @@ echo "  - Differential backup: Daily at 3:00 AM"
 echo "  - Full backup: Weekly on Sunday at 3:00 AM"
 echo "  - Foundry backup: Daily at 3:10 AM"
 echo "  - Docker logs export: Daily at 3:15 AM"
+echo "  - Logs backup to S3: Daily at 3:20 AM"
 echo "  - Daily heartbeat: Daily at 3:30 AM"
 echo ""
 echo "Log maintenance schedule:"
@@ -129,7 +133,7 @@ echo "  - Backup log archive:      Daily at 23:55 (compress + move to archive/)"
 echo ""
 echo "IMPORTANT: Timers are enabled but not started to avoid triggering backups during installation."
 echo "They will start automatically on next reboot, or you can start them now:"
-echo "  sudo systemctl start postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer"
+echo "  sudo systemctl start postgres-diff-backup.timer postgres-full-backup.timer foundry-backup.timer docker-logs-export.timer logs-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers"
