@@ -17,7 +17,7 @@ DISCORD_ENV="${SECRETS_DIR}/discord.env"
 source "${BACKUPS_DIR}/config.sh"
 
 # Check required dependencies (Issue 4)
-for cmd in docker jq bc date curl restic; do
+for cmd in docker jq bc date curl restic aws; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "ERROR: Required command '$cmd' is not installed" >&2
         exit 1
@@ -43,7 +43,6 @@ done
 export FOUNDRY_AWS_ENV="${SECRETS_DIR}/aws.env"
 export FOUNDRY_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 export LOGS_AWS_ENV="${SECRETS_DIR}/aws.env"
-export LOGS_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 export CONFIGS_AWS_ENV="${SECRETS_DIR}/aws.env"
 export CONFIGS_RESTIC_KEY="${SECRETS_DIR}/restic.key"
 
@@ -607,29 +606,24 @@ heartbeat() {
     
     # Add Logs status
     status_lines+=("")
-    status_lines+=("**Logs (restic)**")
+    status_lines+=("**Logs (s3 sync)**")
 
-    if ((logs_check_result == 0)) && [[ -n "${LOGS_SNAPSHOT_TIME:-}" ]] && \
-       validate_numeric "${LOGS_SNAPSHOT_TIME}" "LOGS_SNAPSHOT_TIME" 2>/dev/null; then
-        local logs_time=$(date -d "@${LOGS_SNAPSHOT_TIME}" '+%Y-%m-%d %H:%M:%S')
-        local logs_size=$(format_bytes "${LOGS_SNAPSHOT_SIZE:-0}")
-
+    if ((logs_check_result == 0)) && [[ -n "${LOGS_SYNC_TIME:-}" ]]; then
         local logs_age_display="${LOGS_AGE_HOURS:-unknown}h"
         if [[ -n "${LOGS_AGE_HOURS:-}" ]] && [[ "${LOGS_AGE_HOURS}" =~ ^[0-9]+$ ]]; then
             logs_age_display="${LOGS_AGE_HOURS}h ago"
         fi
 
-        status_lines+=("✓ Last backup: \`${logs_time}\` (${logs_age_display})")
-        status_lines+=("✓ Size: \`${logs_size}\`")
-        status_lines+=("✓ Snapshots: \`${LOGS_TOTAL_SNAPSHOTS:-unknown}\` (retained forever)")
-        status_lines+=("✓ Total files stored: \`${LOGS_TOTAL_FILES:-unknown}\` (unique across all snapshots)")
+        status_lines+=("✓ Last sync: \`${LOGS_SYNC_TIME}\` (${logs_age_display})")
+        status_lines+=("✓ S3 files: \`${LOGS_S3_FILES:-unknown}\`")
+        status_lines+=("✓ S3 size: \`$(format_bytes "${LOGS_S3_SIZE:-0}")\`")
     else
         status_lines+=("✗ Failed to retrieve backup information")
         if [[ -n "${logs_info:-}" ]]; then
             local logs_error_preview="${logs_info:0:500}"
             status_lines+=("**Error:** \`${logs_error_preview}\`")
         fi
-        status_lines+=("**Debug:** Check restic repo: \`restic -r ${LOGS_RESTIC_REPO} snapshots\`")
+        status_lines+=("**Debug:** Check S3: \`aws s3 ls ${LOGS_S3_PATH}/\`")
         exit_code=$EXIT_ERROR
     fi
 
@@ -793,11 +787,10 @@ heartbeat() {
 
     # Check Logs backup
     if ((logs_check_result != 0)) || \
-       [[ -z "${LOGS_SNAPSHOT_TIME:-}" ]] || \
-       ! validate_numeric "${LOGS_SNAPSHOT_TIME}" "LOGS_SNAPSHOT_TIME" 2>/dev/null || \
+       [[ -z "${LOGS_SYNC_TIME:-}" ]] || \
        [[ "${LOGS_STATUS:-}" == "Stale" ]]; then
 
-        if ((logs_check_result != 0)) || [[ -z "${LOGS_SNAPSHOT_TIME:-}" ]]; then
+        if ((logs_check_result != 0)) || [[ -z "${LOGS_SYNC_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Logs backup check failed or no backup data available.")
             warning_lines+=("**Action:** Check systemd timer: \`systemctl status logs-backup.timer\`")
             warning_lines+=("**Logs:** \`journalctl -u logs-backup.service -n 50\`")

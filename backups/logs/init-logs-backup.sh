@@ -1,14 +1,11 @@
 #!/bin/bash
 #
-# Initialize Logs Backup Repository
-# Run this once to set up the restic repository in S3
-#
-# Reuses the same encryption key as the Foundry backup (per plan)
+# Logs Backup S3 Setup Verification
+# Run this once to verify S3 is accessible before the first sync
 #
 # Prerequisites:
+# - aws CLI v2 installed (via infra/setup.sh)
 # - AWS credentials in backups/secrets/aws.env
-# - Restic password in backups/secrets/restic.key
-# - restic installed (via infra/setup.sh)
 #
 
 set -euo pipefail
@@ -22,17 +19,16 @@ REPO_ROOT="$(realpath "$BACKUPS_DIR/..")"
 source "${BACKUPS_DIR}/config.sh"
 
 echo "=========================================="
-echo "Logs Backup Repository Setup"
+echo "Logs Backup S3 Setup"
 echo "=========================================="
 echo ""
 
 # Check prerequisites
 echo "Checking prerequisites..."
 
-if ! command -v restic >/dev/null 2>&1; then
-    echo "ERROR: restic is not installed"
-    echo "Run: sudo apt install restic"
-    echo "Or: cd $REPO_ROOT/infra && sudo ./setup.sh"
+if ! command -v aws >/dev/null 2>&1; then
+    echo "ERROR: aws CLI is not installed"
+    echo "Run: sudo $REPO_ROOT/infra/setup.sh"
     exit 1
 fi
 
@@ -42,66 +38,52 @@ if [[ ! -f "$BACKUPS_DIR/secrets/aws.env" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$BACKUPS_DIR/secrets/restic.key" ]]; then
-    echo "ERROR: Restic password not found at $BACKUPS_DIR/secrets/restic.key"
-    echo "Reuse the same key as the Foundry backup (per the backup plan)"
-    exit 1
-fi
-
-echo "✓ restic installed: $(restic version | head -1)"
+echo "✓ aws CLI installed: $(aws --version 2>&1 | head -1)"
 echo "✓ AWS credentials found"
-echo "✓ Restic password found (shared with Foundry backup)"
 echo ""
 
 # Load AWS credentials
 source "$BACKUPS_DIR/secrets/aws.env"
 
-# Set restic password
-export RESTIC_PASSWORD=$(cat "$BACKUPS_DIR/secrets/restic.key")
+S3_DESTINATION="$LOGS_S3_PATH"
+S3_BUCKET=$(echo "$S3_DESTINATION" | grep -oP 's3://\K[^/]+')
 
-# Configuration - use centralized repo from config.sh
-RESTIC_REPO="$LOGS_RESTIC_REPO"
-
-echo "Repository: $RESTIC_REPO"
-echo "Encryption: Client-side via restic (same key as Foundry)"
+echo "S3 destination: $S3_DESTINATION"
 echo ""
 
-# Check if repository already exists
-echo "Checking if repository exists..."
-if restic -r "$RESTIC_REPO" snapshots >/dev/null 2>&1; then
+# Check S3 accessibility
+echo "Testing S3 accessibility..."
+if aws s3 ls "$S3_DESTINATION/" >/dev/null 2>&1; then
+    echo "✓ S3 path accessible"
     echo ""
-    echo "⚠️  Repository already exists!"
-    echo ""
-    echo "Current snapshots:"
-    restic -r "$RESTIC_REPO" snapshots
-    echo ""
-    read -p "Repository is already initialized. Nothing to do. Press Enter to exit..."
-    exit 0
+    echo "Existing content summary:"
+    aws s3 ls --recursive --summarize "$S3_DESTINATION/" 2>/dev/null | tail -3 || echo "  (none)"
+else
+    echo "⚠️  S3 path not yet accessible or empty — this is expected on first run."
+    echo "   Checking bucket-level access..."
+    if ! aws s3 ls "s3://$S3_BUCKET/" >/dev/null 2>&1; then
+        echo "ERROR: Cannot access S3 bucket: $S3_BUCKET"
+        echo "Check AWS credentials and IAM permissions."
+        exit 1
+    fi
+    echo "✓ Bucket accessible (no logs uploaded yet)"
 fi
 
-# Initialize repository
-echo "Initializing restic repository at $RESTIC_REPO ..."
-restic -r "$RESTIC_REPO" init
+echo ""
+echo "⚠️  S3 encryption reminder:"
+echo "   Verify that the '${S3_BUCKET}' bucket has SSE-S3 or SSE-KMS enabled"
+echo "   (AWS console: Bucket > Properties > Default encryption)."
 
 echo ""
-echo "✓ Repository initialized successfully!"
-echo ""
-
-# Verify by listing snapshots (should be empty)
-echo "Verifying repository..."
-restic -r "$RESTIC_REPO" snapshots
-echo "✓ Repository verified (no snapshots yet, as expected)"
-echo ""
-
 echo "=========================================="
-echo "Setup complete!"
+echo "Setup verified!"
 echo ""
 echo "Next steps:"
-echo "  1. Run first backup manually to verify:"
+echo "  1. Run first sync manually to verify:"
 echo "     $SCRIPT_DIR/logs-backup.sh"
 echo ""
-echo "  2. Verify snapshot in S3:"
-echo "     restic -r $RESTIC_REPO snapshots"
+echo "  2. Verify files in S3:"
+echo "     aws s3 ls --recursive $S3_DESTINATION/ | head -20"
 echo ""
 echo "  3. Install and start the systemd timer:"
 echo "     sudo $BACKUPS_DIR/install-systemd.sh"

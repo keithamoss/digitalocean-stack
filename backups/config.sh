@@ -15,7 +15,7 @@ export S3_BUCKET_PREFIX="jig-ho-cottage-dr"
 
 # Restic Configuration
 export FOUNDRY_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/foundry"
-export LOGS_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/logs"
+export LOGS_S3_PATH="s3://${S3_BUCKET_PREFIX}/pi-hosting/logs"
 export CONFIGS_RESTIC_REPO="s3:s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET_PREFIX}/pi-hosting/configs"
 
 # Prevent multiple sourcing

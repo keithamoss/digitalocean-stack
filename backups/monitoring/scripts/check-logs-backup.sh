@@ -1,22 +1,20 @@
 #!/bin/bash
-# Logs Backup Status Check (restic)
+# Logs Backup Status Check (s3 sync)
 # Provides functions to check and report logs backup status
 #
 # This script is sourced by backup-status.sh, not run directly
 #
 # Note: Configuration now comes from centralized config.sh
-# LOGS_RESTIC_REPO, LOGS_AWS_ENV, LOGS_RESTIC_KEY are set by caller
-# Retention policy: Keep all snapshots forever (no pruning)
+# LOGS_S3_PATH, LOGS_AWS_ENV are set by caller
 
 # validate_logs_backup_system
 #
 # Validates logs backup system and returns JSON info
-# Checks restic repository accessibility and retrieves latest snapshot
+# Reads .last-sync sentinel from S3 and queries S3 for file/size stats
 #
 # Globals Used:
-#   LOGS_RESTIC_REPO - S3 repository URL
+#   LOGS_S3_PATH - S3 destination path (s3://bucket/prefix)
 #   LOGS_AWS_ENV - Path to AWS credentials file
-#   LOGS_RESTIC_KEY - Path to restic password file
 #   LOGS_BACKUP_STALE_HOURS - Hours before backup considered stale
 #
 # Returns:
@@ -24,6 +22,12 @@
 #   JSON string with backup metadata on stdout
 #   Error messages on stderr
 validate_logs_backup_system() {
+    # Check aws CLI is available
+    if ! command -v aws >/dev/null 2>&1; then
+        echo "ERROR: aws CLI is not installed" >&2
+        return 1
+    fi
+
     # Load AWS credentials
     if [[ ! -f "$LOGS_AWS_ENV" ]]; then
         echo "ERROR: AWS credentials not found at $LOGS_AWS_ENV" >&2
@@ -31,108 +35,53 @@ validate_logs_backup_system() {
     fi
     source "$LOGS_AWS_ENV"
 
-    # Load restic password
-    if [[ ! -f "$LOGS_RESTIC_KEY" ]]; then
-        echo "ERROR: Restic key not found at $LOGS_RESTIC_KEY" >&2
-        return 1
-    fi
-    export RESTIC_PASSWORD=$(cat "$LOGS_RESTIC_KEY")
-
-    # Get latest snapshot with JSON output
-    # --no-cache for faster status checks (only reading metadata)
-    local snapshots
-    local restic_output
-    local restic_stderr
-
-    restic_stderr=$(mktemp)
-    if ! restic_output=$(restic --no-cache -r "$LOGS_RESTIC_REPO" snapshots --json --latest 1 2>"$restic_stderr"); then
-        local error_msg=$(cat "$restic_stderr")
-        rm -f "$restic_stderr"
-        echo "ERROR: Failed to query restic repository: $error_msg" >&2
-        return 1
-    fi
-    rm -f "$restic_stderr"
-
-    # Extract only the JSON array (filter out any shell init messages)
-    snapshots=$(echo "$restic_output" | grep -E '^\[|^\{' | head -1)
-
-    if [[ -z "$snapshots" ]]; then
-        echo "ERROR: No JSON output found from restic. Raw output: ${restic_output:0:200}" >&2
+    # Download .last-sync sentinel file from S3
+    local tmp_sentinel
+    tmp_sentinel=$(mktemp)
+    if ! aws s3 cp "${LOGS_S3_PATH}/.last-sync" "$tmp_sentinel" >/dev/null 2>&1; then
+        rm -f "$tmp_sentinel"
+        echo "ERROR: Could not retrieve .last-sync from ${LOGS_S3_PATH}/.last-sync — has the first sync run yet?" >&2
         return 1
     fi
 
-    # Validate JSON is parseable
-    if ! echo "$snapshots" | jq empty 2>/dev/null; then
-        echo "ERROR: Restic output is not valid JSON. Output: ${snapshots:0:200}" >&2
+    # Parse sentinel: format is "<ISO8601-timestamp> <hostname>"
+    local sync_time_str
+    sync_time_str=$(cut -d' ' -f1 "$tmp_sentinel")
+    rm -f "$tmp_sentinel"
+
+    if [[ -z "$sync_time_str" ]]; then
+        echo "ERROR: .last-sync sentinel is empty or malformed" >&2
         return 1
     fi
 
-    # Check if we have any snapshots
-    local snapshot_count
-    snapshot_count=$(echo "$snapshots" | jq '. | length' 2>/dev/null) || {
-        echo "ERROR: Failed to parse snapshot count from JSON" >&2
-        return 1
-    }
-    if [[ "$snapshot_count" == "0" ]]; then
-        echo "ERROR: No logs backups found" >&2
-        return 1
-    fi
-
-    # Extract latest snapshot (sort by time, take most recent)
-    local snapshot_id=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].short_id')
-
-    local snapshot_time_str=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].time')
-    if [[ -z "$snapshot_time_str" ]] || [[ "$snapshot_time_str" == "null" ]]; then
-        echo "ERROR: Failed to extract snapshot time from JSON" >&2
-        return 1
-    fi
-
-    # Convert to epoch with validation
-    local snapshot_time
-    if ! snapshot_time=$(date -d "$snapshot_time_str" +%s 2>/dev/null); then
-        echo "ERROR: Failed to parse snapshot time: $snapshot_time_str" >&2
+    # Convert ISO8601 timestamp to epoch for age calculation
+    local sync_epoch
+    if ! sync_epoch=$(date -d "$sync_time_str" +%s 2>/dev/null); then
+        echo "ERROR: Failed to parse sync timestamp: $sync_time_str" >&2
         return 1
     fi
 
     # Validate timestamp is reasonable
-    local now=$(date +%s)
-    if ((snapshot_time > now + 3600)); then
-        echo "ERROR: Snapshot time is in the future: $snapshot_time_str" >&2
-        return 1
-    fi
-    if ((snapshot_time < now - 63072000)); then  # 2 years
-        echo "ERROR: Snapshot time is more than 2 years old: $snapshot_time_str" >&2
+    local now
+    now=$(date +%s)
+    if ((sync_epoch > now + 3600)); then
+        echo "ERROR: Sync time is in the future: $sync_time_str" >&2
         return 1
     fi
 
-    local snapshot_files=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].summary.total_files_processed // 0')
-    local snapshot_size=$(echo "$snapshots" | jq -r 'sort_by(.time) | reverse | .[0].summary.total_bytes_processed // 0')
-
-    # Get total snapshot count (for informational purposes - no pruning needed)
-    local total_snapshot_count=0
-    local all_snapshots_raw
-    if all_snapshots_raw=$(restic --no-cache -r "$LOGS_RESTIC_REPO" snapshots --json --tag logs 2>/dev/null); then
-        local all_snapshots
-        all_snapshots=$(echo "$all_snapshots_raw" | grep -E '^\[|^\{' | head -1)
-        if [[ -n "$all_snapshots" ]] && echo "$all_snapshots" | jq empty 2>/dev/null; then
-            total_snapshot_count=$(echo "$all_snapshots" | jq '. | length' 2>/dev/null || echo 0)
-        fi
-    fi
-
-    # Get total unique file count across entire repository
-    # This grows predictably each day as new rotated log files are added
-    local total_file_count=0
-    local repo_stats_raw
-    if repo_stats_raw=$(restic --no-cache -r "$LOGS_RESTIC_REPO" stats --json 2>/dev/null); then
-        local repo_stats
-        repo_stats=$(echo "$repo_stats_raw" | grep -E '^\{' | head -1)
-        if [[ -n "$repo_stats" ]] && echo "$repo_stats" | jq empty 2>/dev/null; then
-            total_file_count=$(echo "$repo_stats" | jq -r '.total_file_count // 0')
-        fi
+    # Get S3 file count and total size via summarize
+    local s3_ls_output
+    local s3_files=0
+    local s3_size=0
+    if s3_ls_output=$(aws s3 ls --recursive --summarize "${LOGS_S3_PATH}/" 2>/dev/null); then
+        s3_files=$(echo "$s3_ls_output" | awk '/Total Objects:/ { print $NF }')
+        s3_size=$(echo "$s3_ls_output" | awk '/Total Size:/ { print $NF }')
+        s3_files=${s3_files:-0}
+        s3_size=${s3_size:-0}
     fi
 
     # Calculate age and determine staleness
-    local age_seconds=$((now - snapshot_time))
+    local age_seconds=$((now - sync_epoch))
     local age_hours=$((age_seconds / 3600))
 
     local status="Healthy"
@@ -142,21 +91,15 @@ validate_logs_backup_system() {
 
     # Output as JSON
     jq -n \
-        --arg snapshot_id "$snapshot_id" \
-        --arg snapshot_time "$snapshot_time" \
-        --arg snapshot_files "$snapshot_files" \
-        --arg snapshot_size "$snapshot_size" \
-        --arg total_snapshot_count "$total_snapshot_count" \
-        --arg total_file_count "$total_file_count" \
+        --arg sync_time "$sync_time_str" \
+        --arg s3_files "$s3_files" \
+        --arg s3_size "$s3_size" \
         --arg age_hours "$age_hours" \
         --arg status "$status" \
         '{
-            snapshot_id: $snapshot_id,
-            snapshot_time: $snapshot_time,
-            snapshot_files: $snapshot_files,
-            snapshot_size: $snapshot_size,
-            total_snapshot_count: $total_snapshot_count,
-            total_file_count: $total_file_count,
+            sync_time: $sync_time,
+            s3_files: $s3_files,
+            s3_size: $s3_size,
             age_hours: $age_hours,
             status: $status
         }'
@@ -172,24 +115,18 @@ validate_logs_backup_system() {
 #   $1 - JSON string from validate_logs_backup_system
 #
 # Globals Set:
-#   LOGS_SNAPSHOT_ID - Snapshot ID
-#   LOGS_SNAPSHOT_TIME - Snapshot timestamp (epoch)
-#   LOGS_SNAPSHOT_FILES - Number of files in snapshot
-#   LOGS_SNAPSHOT_SIZE - Size of snapshot in bytes
-#   LOGS_TOTAL_SNAPSHOTS - Total number of snapshots
-#   LOGS_TOTAL_FILES - Total unique files stored across all snapshots (grows daily)
-#   LOGS_AGE_HOURS - Age of most recent backup in hours
+#   LOGS_SYNC_TIME - Last sync ISO8601 timestamp
+#   LOGS_S3_FILES - Total files in S3
+#   LOGS_S3_SIZE - Total size of S3 files in bytes
+#   LOGS_AGE_HOURS - Age of most recent sync in hours
 #   LOGS_STATUS - Overall status (Healthy/Stale)
 #   LOGS_STATUS_EMOJI - Status emoji
 get_logs_backup_stats() {
     local logs_info="$1"
 
-    LOGS_SNAPSHOT_ID=$(echo "$logs_info" | jq -r '.snapshot_id')
-    LOGS_SNAPSHOT_TIME=$(echo "$logs_info" | jq -r '.snapshot_time')
-    LOGS_SNAPSHOT_FILES=$(echo "$logs_info" | jq -r '.snapshot_files')
-    LOGS_SNAPSHOT_SIZE=$(echo "$logs_info" | jq -r '.snapshot_size')
-    LOGS_TOTAL_SNAPSHOTS=$(echo "$logs_info" | jq -r '.total_snapshot_count')
-    LOGS_TOTAL_FILES=$(echo "$logs_info" | jq -r '.total_file_count')
+    LOGS_SYNC_TIME=$(echo "$logs_info" | jq -r '.sync_time')
+    LOGS_S3_FILES=$(echo "$logs_info" | jq -r '.s3_files')
+    LOGS_S3_SIZE=$(echo "$logs_info" | jq -r '.s3_size')
     LOGS_AGE_HOURS=$(echo "$logs_info" | jq -r '.age_hours')
     LOGS_STATUS=$(echo "$logs_info" | jq -r '.status')
 
@@ -211,7 +148,7 @@ get_logs_backup_stats() {
 # Returns:
 #   0 if all checks pass, 1 if warnings detected
 display_logs_status() {
-    echo -e "\n${BLUE}--- Logs (restic) ---${NC}"
+    echo -e "\n${BLUE}--- Logs (s3 sync) ---${NC}"
 
     local logs_info
     if ! logs_info=$(validate_logs_backup_system 2>&1); then
@@ -223,14 +160,13 @@ display_logs_status() {
     get_logs_backup_stats "$logs_info"
 
     if [[ "$LOGS_STATUS" == "Healthy" ]]; then
-        echo -e "${GREEN}✓ Status:${NC}             $LOGS_STATUS"
+        echo -e "${GREEN}✓ Status:${NC}          $LOGS_STATUS"
     else
-        echo -e "${YELLOW}⚠ Status:${NC}             $LOGS_STATUS (${LOGS_AGE_HOURS}h since last backup)"
+        echo -e "${YELLOW}⚠ Status:${NC}          $LOGS_STATUS (${LOGS_AGE_HOURS}h since last sync)"
     fi
-    echo -e "${GREEN}✓ Last backup:${NC}        $(date -d "@$LOGS_SNAPSHOT_TIME" '+%Y-%m-%d %H:%M:%S')"
-    echo -e "${GREEN}✓ Size:${NC}               $(format_bytes $LOGS_SNAPSHOT_SIZE)"
-    echo -e "${GREEN}✓ Total snapshots:${NC}    $LOGS_TOTAL_SNAPSHOTS (retained forever)"
-    echo -e "${GREEN}✓ Total files stored:${NC} $LOGS_TOTAL_FILES (unique, grows ~daily)"
+    echo -e "${GREEN}✓ Last sync:${NC}       $LOGS_SYNC_TIME"
+    echo -e "${GREEN}✓ S3 files:${NC}        $LOGS_S3_FILES"
+    echo -e "${GREEN}✓ S3 size:${NC}         $(format_bytes $LOGS_S3_SIZE)"
 
     if [[ "$LOGS_STATUS" != "Healthy" ]]; then
         return 1

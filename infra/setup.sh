@@ -127,6 +127,21 @@ else
     echo "restic already installed, skipping"
 fi
 
+# Install aws CLI v2 for logs sync
+# Not available via apt — installed from the official AWS binary (aarch64 for Raspberry Pi)
+echo "==> Installing aws CLI v2 for logs sync"
+if ! command -v aws >/dev/null 2>&1; then
+    apt install -y unzip curl
+    AWSCLI_TMP=$(mktemp -d)
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWSCLI_TMP/awscliv2.zip"
+    unzip -q "$AWSCLI_TMP/awscliv2.zip" -d "$AWSCLI_TMP"
+    "$AWSCLI_TMP/aws/install"
+    rm -rf "$AWSCLI_TMP"
+    echo "aws CLI installed: $(aws --version)"
+else
+    echo "aws CLI already installed, skipping"
+fi
+
 # Set proper permissions for restic key (already validated above)
 chmod 600 "$RESTIC_KEY_FILE"
 chown "$DOCKER_USER:$DOCKER_USER" "$RESTIC_KEY_FILE"

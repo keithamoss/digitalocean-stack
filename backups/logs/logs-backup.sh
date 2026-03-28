@@ -1,20 +1,19 @@
 #!/bin/bash
 #
 # Logs Backup Script
-# Backs up all log directories to S3 using restic
-# Retention: Keep all snapshots forever (no forget policy)
+# Syncs all log directories to S3 using aws s3 sync
+# Retention: Files uploaded to S3 stay forever (aws s3 sync never deletes by default)
 #
-# Log directories backed up:
-#   - logs/nginx/       (nginx logs with logrotate)
-#   - logs/backups/     (backup job logs from wrapper scripts)
-#   - logs/db/          (PostgreSQL logs)
-#   - logs/docker/      (exported Docker logs)
+# Log directories synced:
+#   - logs/nginx/               (nginx logs with logrotate)
+#   - logs/backups/             (backup job logs from wrapper scripts)
+#   - logs/db/                  (PostgreSQL logs)
+#   - logs/docker/              (exported Docker logs)
 #   - logs/demsausage-staging/  (demsausage application logs)
 #
 # Requirements:
-# - restic installed
+# - aws CLI v2 installed (via infra/setup.sh)
 # - AWS credentials in backups/secrets/aws.env
-# - Restic password in backups/secrets/restic.key
 #
 
 set -euo pipefail
@@ -38,30 +37,28 @@ error() {
     exit 1
 }
 
+# Check dependencies
+command -v aws >/dev/null 2>&1 || error "aws CLI is not installed. Run: sudo $REPO_ROOT/infra/setup.sh"
+
 # Source AWS credentials
 [[ -f "$BACKUPS_DIR/secrets/aws.env" ]] || error "AWS credentials file not found: $BACKUPS_DIR/secrets/aws.env"
 source "$BACKUPS_DIR/secrets/aws.env"
 
-# Set restic password
-[[ -f "$BACKUPS_DIR/secrets/restic.key" ]] || error "Restic password file not found: $BACKUPS_DIR/secrets/restic.key"
-export RESTIC_PASSWORD=$(cat "$BACKUPS_DIR/secrets/restic.key")
-
-# Configuration - use centralized repo from config.sh
-RESTIC_REPO="$LOGS_RESTIC_REPO"
+S3_DESTINATION="$LOGS_S3_PATH"
 LOGS_DIR="$REPO_ROOT/logs"
 
 echo "=========================================="
 echo "Logs Backup - $(date)"
 echo "=========================================="
-echo "Repository: $RESTIC_REPO"
-echo "Backup path: $LOGS_DIR"
+echo "Destination: $S3_DESTINATION"
+echo "Source path: $LOGS_DIR"
 echo ""
 
 # Verify logs directory exists
 [[ -d "$LOGS_DIR" ]] || error "Logs directory does not exist: $LOGS_DIR"
 
-# List subdirectories that will be backed up
-echo "Log directories to be backed up:"
+# List subdirectories that will be synced
+echo "Log directories to be synced:"
 for subdir in "$LOGS_DIR"/*/; do
     if [[ -d "$subdir" ]]; then
         dir_size=$(du -sh "$subdir" 2>/dev/null | cut -f1 || echo "unknown")
@@ -70,55 +67,45 @@ for subdir in "$LOGS_DIR"/*/; do
 done
 echo ""
 
-# Verify restic repository is initialized
-echo "Verifying restic repository..."
-if ! restic -r "$RESTIC_REPO" snapshots --last 2>/dev/null >/dev/null; then
-    error "Restic repository not initialized or not accessible. Run init-logs-backup.sh first."
-fi
-echo "✓ Repository verified"
-echo ""
-
-# Test S3 bucket accessibility before starting backup
+# Test S3 accessibility before starting
 echo "Testing S3 bucket accessibility..."
-if ! restic -r "$RESTIC_REPO" stats --mode raw-data 2>/dev/null >/dev/null; then
-    error "Cannot access S3 bucket or repository. Check AWS credentials and bucket permissions (Region: ${AWS_DEFAULT_REGION:-unknown})"
+if ! aws s3 ls "$S3_DESTINATION/" >/dev/null 2>&1; then
+    error "Cannot access S3 path $S3_DESTINATION. Check AWS credentials and bucket permissions."
 fi
 echo "✓ S3 bucket accessible"
 echo ""
 
-# Run backup
-echo "Starting backup..."
+# Run sync
+echo "Starting sync..."
 START_TIME=$(date +%s)
 
-if restic -r "$RESTIC_REPO" backup \
-    --tag logs \
-    --tag daily \
-    --host raspberrypi \
-    --exclude="*.lock" \
-    --exclude="*.tmp" \
-    "$LOGS_DIR"; then
+if aws s3 sync "$LOGS_DIR" "$S3_DESTINATION/"; then
 
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
 
     echo ""
-    echo "Backup completed successfully in ${DURATION}s"
+    echo "Sync completed successfully in ${DURATION}s"
 
-    # Show latest snapshot info
-    echo ""
-    echo "Latest snapshot:"
-    restic -r "$RESTIC_REPO" snapshots --latest 1 --json | \
-        jq -r '.[] | "  ID: \(.short_id)\n  Time: \(.time)\n  Hostname: \(.hostname)\n  Files: \((.files_new // 0) + (.files_changed // 0) + (.files_unmodified // 0)) (\(.files_new // 0) new, \(.files_changed // 0) changed)\n  Size: \(((.size_new // 0) + (.size_changed // 0) + (.size_unmodified // 0)) / 1024 / 1024 | floor)MB (\((.size_new // 0) / 1024 / 1024 | floor)MB new)"'
+    # Write .last-sync sentinel to S3 so the monitor can detect staleness
+    SYNC_TIME=$(date -Iseconds)
+    echo "${SYNC_TIME} $(hostname)" | aws s3 cp - "${S3_DESTINATION}/.last-sync"
+    echo "✓ Wrote .last-sync sentinel: ${SYNC_TIME}"
 
-    # Retention policy: Keep all snapshots forever (no forget/prune)
-    # Logs are retained indefinitely per the backup strategy
-    echo ""
-    echo "Retention policy: Keep all snapshots forever (no pruning)"
-
+    # Show repository statistics
     echo ""
     echo "Repository statistics:"
-    restic -r "$RESTIC_REPO" stats --json | \
-        jq -r '"  Total size: \((.total_size // 0) / 1024 / 1024 | floor)MB\n  Total blob count: \(.total_blob_count // 0)"'
+    S3_SUMMARY=$(aws s3 ls --recursive --summarize "${S3_DESTINATION}/" 2>/dev/null | tail -3 || echo "")
+    S3_FILES=$(echo "$S3_SUMMARY" | awk '/Total Objects:/ {print $NF}')
+    S3_SIZE=$(echo "$S3_SUMMARY" | awk '/Total Size:/ {print $NF}')
+    if [[ -n "$S3_FILES" ]] && [[ -n "$S3_SIZE" ]]; then
+        S3_SIZE_MB=$(( (S3_SIZE + 524288) / 1048576 ))
+        echo "  Total files in S3: ${S3_FILES}"
+        echo "  Total S3 size:     ${S3_SIZE_MB}MB"
+    fi
+
+    echo ""
+    echo "Retention policy: Files uploaded to S3 are never deleted (aws s3 sync default)"
 
     echo ""
     echo "=========================================="
