@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh" "check-restore-test.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -268,6 +268,7 @@ main() {
     local foundry_status=0
     local logs_status=0
     local configs_status=0
+    local restore_test_status=0
     
     # PostgreSQL Backup Status
     local pg_info
@@ -296,6 +297,11 @@ main() {
         configs_status=1
     fi
 
+    # Restore Test Status
+    if ! display_restore_test_status; then
+        restore_test_status=1
+    fi
+
     # 30-day consolidated success rate (subset scope)
     get_consolidated_success_stats
     echo -e "\n${BLUE}=== Consolidated Reliability (30d, Subset Scope) ===${NC}"
@@ -312,10 +318,10 @@ main() {
     fi
     
     # Overall status - Issue 17
-    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)) && ((configs_status == 0)); then
+    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)) && ((configs_status == 0)) && ((restore_test_status == 0)); then
         echo -e "\n${GREEN}✓ All backup systems operational${NC}"
         return $EXIT_SUCCESS
-    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)) || ((configs_status == 2)); then
+    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)) || ((configs_status == 2)) || ((restore_test_status == 2)); then
         echo -e "\n${RED}✗ Critical backup system errors detected${NC}"
         return $EXIT_ERROR
     else
@@ -333,6 +339,7 @@ heartbeat() {
     local foundry_check_result=0  # Issue 1,10: Use consistent 0=success convention
     local logs_check_result=0
     local configs_check_result=0
+    local restore_test_check_result=0
     local now
     now=$(date +%s)
     local exit_code=$EXIT_SUCCESS  # Track overall exit code - Issue 17
@@ -424,6 +431,16 @@ heartbeat() {
         configs_check_result=1
         echo "ERROR: Configs backup check failed" >&2
         echo "Error output: ${configs_info}" >&2
+    fi
+
+    # Check Restore Test status
+    local restore_test_info
+    if restore_test_info=$(validate_restore_test_system 2>&1); then
+        get_restore_test_stats "$restore_test_info"
+    else
+        restore_test_check_result=1
+        echo "ERROR: Restore-test check failed" >&2
+        echo "Error output: ${restore_test_info}" >&2
     fi
 
     # Robust differential backup check using timestamp (Issue 1, 2, 3, 5, 8)
@@ -663,6 +680,26 @@ heartbeat() {
         exit_code=$EXIT_ERROR
     fi
 
+    # Add Restore Test status
+    status_lines+=("")
+    status_lines+=("**Restore Test (monthly)**")
+
+    if ((restore_test_check_result == 0)) && [[ -n "${RESTORE_TEST_RUN_TIME:-}" ]]; then
+        status_lines+=("✓ Last run: \`${RESTORE_TEST_RUN_TIME}\`")
+        status_lines+=("✓ Result: \`${RESTORE_TEST_RESULT:-unknown}\` (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks)")
+        status_lines+=("✓ Duration: \`${RESTORE_TEST_DURATION:-unknown}\`")
+        status_lines+=("✓ Age: \`${RESTORE_TEST_AGE_DAYS:-unknown} days\`")
+        status_lines+=("✓ State log: \`${RESTORE_TEST_STATE_LOG_FILE:-unknown}\`")
+    else
+        status_lines+=("✗ Failed to retrieve restore-test information")
+        if [[ -n "${restore_test_info:-}" ]]; then
+            local restore_error_preview="${restore_test_info:0:500}"
+            status_lines+=("**Error:** \`${restore_error_preview}\`")
+        fi
+        status_lines+=("**Debug:** Check restore-test logs: \`ls -la ${STACK_DIR}/logs/restore/orchestration/\`")
+        exit_code=$EXIT_ERROR
+    fi
+
     status_lines+=("")
     status_lines+=("**Storage**")
     status_lines+=("✓ S3 Repos: Operational")
@@ -746,6 +783,18 @@ heartbeat() {
             exit_code=$EXIT_ERROR
         fi
     fi
+
+    # Check for timeout in Restore Test
+    local restore_test_log
+    if restore_test_log=$(get_most_recent_log "${STACK_DIR}/logs/restore/orchestration" "restore-test"); then
+        if check_for_timeout_in_log "$restore_test_log"; then
+            warning_lines+=("**TIMEOUT:** Restore test exceeded systemd timeout limit.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u restore-test.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in restore-test.service if needed.")
+            has_warnings=1
+            exit_code=$EXIT_ERROR
+        fi
+    fi
     
     # Check full backup status - Issue 1
     if ((full_backup_status != 0)); then
@@ -817,6 +866,29 @@ heartbeat() {
         elif [[ "${CONFIGS_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Configs backup is stale (older than ${CONFIGS_BACKUP_STALE_HOURS} hours).")
             warning_lines+=("**Action:** Verify backup schedule and check for failures.")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+        fi
+        has_warnings=1
+    fi
+
+    # Check Restore Test backup freshness and result
+    if ((restore_test_check_result != 0)) || \
+       [[ -z "${RESTORE_TEST_RUN_TIME:-}" ]] || \
+       [[ "${RESTORE_TEST_RESULT:-}" == "Failed" ]] || \
+       [[ "${RESTORE_TEST_STATUS:-}" == "Stale" ]]; then
+
+        if ((restore_test_check_result != 0)) || [[ -z "${RESTORE_TEST_RUN_TIME:-}" ]]; then
+            warning_lines+=("**Warning:** Restore-test status check failed or no restore-test data available.")
+            warning_lines+=("**Action:** Check systemd timer: \`systemctl status restore-test.timer\`")
+            warning_lines+=("**Logs:** \`journalctl -u restore-test.service -n 50\`")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
+        elif [[ "${RESTORE_TEST_RESULT:-}" == "Failed" ]]; then
+            warning_lines+=("**Warning:** Last restore test failed (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks passed).")
+            warning_lines+=("**Action:** Review latest restore-test logs and rerun manually.")
+            [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
+        elif [[ "${RESTORE_TEST_STATUS:-}" == "Stale" ]]; then
+            warning_lines+=("**Warning:** Restore test is stale (older than ${RESTORE_TEST_STALE_DAYS} days).")
+            warning_lines+=("**Action:** Trigger restore test manually: \`${BACKUPS_DIR}/orchestration/restore-test.sh\`")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
         fi
         has_warnings=1

@@ -32,6 +32,8 @@ export WAL_FAILURE_WINDOW=604800            # 7 days to check for WAL failures
 export FOUNDRY_BACKUP_STALE_HOURS=30        # Hours before Foundry backup considered stale
 export LOGS_BACKUP_STALE_HOURS=30           # Hours before logs backup considered stale
 export CONFIGS_BACKUP_STALE_HOURS=30        # Hours before configs backup considered stale
+export RESTORE_TEST_STALE_DAYS=40           # Days before monthly restore test considered stale
+export RESTORE_TEST_STALE_HOURS=960         # Derived threshold for heartbeat age display
 export COMMAND_TIMEOUT=60                   # Timeout for external commands (seconds)
 
 # Retention Policy Configuration (Issue 17)
