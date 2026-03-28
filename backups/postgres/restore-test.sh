@@ -72,6 +72,8 @@ OVERALL_RESULT="FAILED"
 RESULT_NOTES=()
 POSTGRES_UID=""
 POSTGRES_GID=""
+declare -A DB_ROW_TOTALS=()
+declare -A DB_ROW_PASSED=()
 
 # fail_preflight
 #
@@ -397,6 +399,11 @@ validate_row_counts() {
     local total=0 passed=0
     local all_ok=true
 
+    for validate_db in "${VALIDATE_DBS[@]}"; do
+        DB_ROW_TOTALS["$validate_db"]=0
+        DB_ROW_PASSED["$validate_db"]=0
+    done
+
     printf "%-20s %-45s %12s %12s  %s\n" \
         "Database" "Table" "Production" "Restored" "Status" | tee -a "$LOG_FILE"
     printf "%-20s %-45s %12s %12s  %s\n" \
@@ -412,6 +419,7 @@ validate_row_counts() {
             full_tbl=$(echo "$full_tbl" | xargs)
             [[ -z "$full_tbl" ]] && continue
             total=$((total + 1))
+            DB_ROW_TOTALS["$validate_db"]=$(( ${DB_ROW_TOTALS["$validate_db"]} + 1 ))
 
             local prod_cnt
             prod_cnt=$(psql_prod "$validate_db" \
@@ -437,6 +445,9 @@ validate_row_counts() {
             fi
 
             [[ "$status" == "PASS" ]] && passed=$((passed + 1))
+            if [[ "$status" == "PASS" ]]; then
+                DB_ROW_PASSED["$validate_db"]=$(( ${DB_ROW_PASSED["$validate_db"]} + 1 ))
+            fi
             printf "%-20s %-45s %12s %12s  %s\n" "$validate_db" "${full_tbl}" "$prod_cnt" "$test_cnt" "$status" \
                 | tee -a "$LOG_FILE"
         done <<< "$tables"
@@ -444,6 +455,9 @@ validate_row_counts() {
 
     log ""
     log "Row count results: ${passed}/${total} tables passed"
+    for validate_db in "${VALIDATE_DBS[@]}"; do
+        log "  ${validate_db}: ${DB_ROW_PASSED["$validate_db"]}/${DB_ROW_TOTALS["$validate_db"]} tables passed"
+    done
 
     if [[ "$all_ok" == "true" ]]; then
         log "✓ All tables within 99% threshold"
@@ -496,7 +510,10 @@ send_restore_report() {
         description+="**Databases:** ✅ All production databases present\n"
         description+="**Table inventory:** ✅ All production user tables present in restored DBs (${VALIDATE_DBS[*]})\n"
         description+="**PostGIS:** ✅ Extension present in all validation DBs (${VALIDATE_DBS[*]})\n"
-        description+="**Row counts:** ✅ All user tables in ${VALIDATE_DBS[*]} ≥ 99% of production\n"
+        description+="**Row counts:** ✅ All user tables ≥ 99% of production\n"
+        for validate_db in "${VALIDATE_DBS[@]}"; do
+            description+="  • ${validate_db}: ${DB_ROW_PASSED["$validate_db"]}/${DB_ROW_TOTALS["$validate_db"]} tables passed\n"
+        done
         description+="\n**Total duration:** ${duration_str}"
         send_discord "PostgreSQL Restore Test: PASSED" "$description" 5763719 "✅"
     else

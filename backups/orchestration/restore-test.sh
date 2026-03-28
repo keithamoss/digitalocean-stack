@@ -13,15 +13,19 @@
 #   Phase 5 Part 2 — PostgreSQL restore test:
 #     - Restore latest pgBackRest backup to /tmp/postgres-restore-test/
 #     - Start restored PostgreSQL on port 5433
-#     - Validate databases, schema, PostGIS, and row counts vs. production
+#     - Validate databases, table inventory, PostGIS, and row counts vs. production
 #     - Detailed report sent as a separate Discord message by postgres/restore-test.sh
 #     - Logs: logs/restore/postgresql/
-#
-# Future scope:
-#   - Phase 5 Part 3: Foundry restore test
+#   Phase 5 Part 3 — Foundry restore test:
+#     - Restic restore latest snapshot to /tmp/foundry-restore-test/
+#     - Verify Data/Config structure and file count baseline
+#     - Start restored Foundry container on port 30002
+#     - Verify HTTP readiness (200/302)
+#     - Detailed report sent as a separate Discord message by foundry/restore-test.sh
+#     - Logs: logs/restore/foundry/
 #
 # Schedule: Monthly on 1st Sunday at 4:00 AM (after 3:00 AM consolidated backup)
-# Logs:     logs/restore/
+# Logs:     logs/restore/orchestration/
 
 set -euo pipefail
 
@@ -33,8 +37,8 @@ SECRETS_DIR="${BACKUPS_DIR}/secrets"
 # Load shared wrapper library (also loads config.sh via setup_wrapper)
 source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 
-# Setup logging to logs/restore/
-LOG_DIR="$STACK_DIR/logs/restore"
+# Setup logging to logs/restore/orchestration/
+LOG_DIR="$STACK_DIR/logs/restore/orchestration"
 setup_wrapper "$LOG_DIR" "restore-test"
 
 # Install timeout trap handler
@@ -186,6 +190,22 @@ run_postgres_restore_test() {
     bash "$script"
 }
 
+# run_foundry_restore_test
+#
+# Calls backups/foundry/restore-test.sh, which runs the full restore + startup
+# validation and sends its own detailed Discord message on completion.
+run_foundry_restore_test() {
+    local script="${BACKUPS_DIR}/foundry/restore-test.sh"
+
+    if [[ ! -x "$script" ]]; then
+        log "✗ ${script} not found or not executable"
+        return 1
+    fi
+
+    log "  (Detailed pass/fail report will be sent as a separate Discord message)"
+    bash "$script"
+}
+
 # ─── Discord reporting ───────────────────────────────────────────────────────
 
 send_combined_report() {
@@ -206,7 +226,7 @@ send_combined_report() {
         for check in "${FAILED_CHECKS[@]}"; do
             description+="  • ${check}\n"
         done
-        description+="\n**Action required:** Check logs in \`logs/restore/\`"
+        description+="\n**Action required:** Check logs in \`logs/restore/orchestration/\`"
         send_discord "Restore Test: Monthly Checks FAILED" "$description" 15548997 "🔴"
     fi
 }
@@ -221,7 +241,10 @@ log "Phase 1: Repository integrity checks"
 log "Scope: Foundry restic, Configs restic, Logs S3"
 log ""
 log "Phase 2: PostgreSQL restore test"
-log "Scope: pgBackRest restore → start → validate databases/schema/PostGIS/row counts"
+log "Scope: pgBackRest restore → start → validate databases/table inventory/PostGIS/row counts"
+log ""
+log "Phase 3: Foundry restore test"
+log "Scope: restic restore → validate Data/Config + file count → startup + HTTP readiness"
 log ""
 
 # Load credentials (needed by all checks)
@@ -249,6 +272,11 @@ run_integrity_check "Logs S3 bucket"            check_logs_integrity    || true
 log ""
 log "=== Phase 2: PostgreSQL Restore Test ==="
 run_integrity_check "PostgreSQL restore test" run_postgres_restore_test || true
+
+# Phase 3: Foundry restore test (sends its own detailed Discord message)
+log ""
+log "=== Phase 3: Foundry Restore Test ==="
+run_integrity_check "Foundry restore test" run_foundry_restore_test || true
 
 # Summary
 log ""

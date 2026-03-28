@@ -99,7 +99,9 @@ fi
 echo "Setting up log directories..."
 mkdir -p \
     "$STACK_DIR/logs/restore" \
+    "$STACK_DIR/logs/restore/orchestration" \
     "$STACK_DIR/logs/restore/postgresql" \
+    "$STACK_DIR/logs/restore/foundry" \
     "$STACK_DIR/logs/backups/postgres-full" \
     "$STACK_DIR/logs/backups/postgres-diff" \
     "$STACK_DIR/logs/backups/foundry" \
@@ -107,6 +109,7 @@ mkdir -p \
     "$STACK_DIR/logs/backups/docker-logs" \
     "$STACK_DIR/logs/backups/logs-backup" \
     "$STACK_DIR/logs/backups/consolidated" \
+    "$STACK_DIR/logs/backups/restore-test" \
     "$STACK_DIR/logs/backups/configs-backup" \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"

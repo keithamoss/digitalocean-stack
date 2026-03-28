@@ -22,7 +22,9 @@
 #   logs/backups/logs-backup/    backup-*.log
 #   logs/backups/postgres-diff/  diff-backup-*.log
 #   logs/backups/postgres-full/  full-backup-*.log
-#   logs/restore/                restore-test-*.log
+#   logs/restore/orchestration/  restore-test-*.log (orchestrator)
+#   logs/restore/postgresql/     restore-test-*.log
+#   logs/restore/foundry/        foundry-restore-test-*.log
 
 set -euo pipefail
 
@@ -120,6 +122,8 @@ archive_logs "$BACKUPS_LOG_DIR/heartbeat"      "heartbeat-*.log"
 archive_logs "$BACKUPS_LOG_DIR/logs-backup"    "backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-diff"  "diff-backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-full"  "full-backup-*.log"
-archive_logs "$RESTORE_LOG_DIR"               "restore-test-*.log"
+archive_logs "$RESTORE_LOG_DIR/orchestration"  "restore-test-*.log"
+archive_logs "$RESTORE_LOG_DIR/postgresql"     "restore-test-*.log"
+archive_logs "$RESTORE_LOG_DIR/foundry"        "foundry-restore-test-*.log"
 
 echo "=== Log Archive Complete ==="
