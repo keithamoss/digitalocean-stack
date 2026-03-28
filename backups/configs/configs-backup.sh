@@ -16,6 +16,7 @@
 #   - foundry-test/secrets/    (disposable test environment)
 #   - secrets-tmpl/            (git-tracked templates, not real secrets)
 #   - foundry/data/            (Foundry runtime data, not credentials)
+#   - db/data/                 (Postgres data dir, owned by Docker postgres UID - not accessible)
 #
 # Excluded files:
 #   - */templates/             (already in git)
@@ -78,6 +79,7 @@ mapfile -t SECRETS_PATHS < <(
         ! -path "${REPO_ROOT}/secrets-tmpl" \
         ! -path "${REPO_ROOT}/secrets-tmpl/*" \
         ! -path "${REPO_ROOT}/foundry/data/*" \
+        ! -path "${REPO_ROOT}/db/data/*" \
         ! -path "*/.git/*" \
         | sort
 )
