@@ -1,15 +1,15 @@
 [Unit]
-Description=Backup Log Archive
-OnFailure=backup-failure-alert@backups-log-archive.service
+Description=Log Archive
+OnFailure=backup-failure-alert@log-archive.service
 
 [Service]
 Type=oneshot
 # Run as root — required to read/write log files created by root-owned backup services
 User=root
 Group=root
-WorkingDirectory=@STACK_DIR@/infra/backups
+WorkingDirectory=@STACK_DIR@/infra/logs
 
-ExecStart=@STACK_DIR@/infra/backups/backups-log-archive.sh
+ExecStart=@STACK_DIR@/infra/logs/log-archive.sh
 
 # Timeout after 5 minutes (should complete in seconds)
 TimeoutStartSec=300
@@ -17,7 +17,7 @@ TimeoutStartSec=300
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=backups-log-archive
+SyslogIdentifier=log-archive
 
 # Restart policy
 Restart=no
@@ -27,4 +27,4 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/logs/backups
+ReadWritePaths=@STACK_DIR@/logs/backups @STACK_DIR@/logs/restore

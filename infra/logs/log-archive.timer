@@ -1,6 +1,6 @@
 [Unit]
-Description=Backup Log Archive Timer
-Requires=backups-log-archive.service
+Description=Log Archive Timer
+Requires=log-archive.service
 
 [Timer]
 # Run at 23:55 daily — end of day, before midnight rollover.

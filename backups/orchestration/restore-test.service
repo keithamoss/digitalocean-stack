@@ -1,0 +1,37 @@
+[Unit]
+Description=Monthly Restore Tests and Integrity Checks
+After=network-online.target
+Wants=network-online.target
+OnFailure=backup-failure-alert@restore-test.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=@STACK_DIR@/backups/orchestration
+
+ExecStart=@STACK_DIR@/backups/orchestration/restore-test.sh
+
+# Allow enough time for full restore tests (Phase 5 Parts 2 & 3 will add PostgreSQL + Foundry)
+TimeoutStartSec=7200
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=restore-test
+
+# Restart policy
+Restart=no
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=75%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs/restore
+
+[Install]
+WantedBy=multi-user.target

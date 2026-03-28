@@ -1,11 +1,12 @@
 #!/bin/bash
-# backups-log-archive.sh
+# log-archive.sh
 #
-# Compress and archive backup wrapper log files.
+# Compress and archive operational log files for scripts that write pre-dated
+# log files (e.g. backup-YYYY-MM-DD.log, restore-test-YYYY-MM-DD.log).
 #
-# Backup wrappers create pre-dated log files (e.g. diff-backup-YYYY-MM-DD.log),
-# so logrotate's rename-and-date-stamp approach would produce double-dated filenames.
-# Instead, this script runs daily via systemd timer and for each backup log directory:
+# logrotate's rename-and-date-stamp approach would produce double-dated filenames
+# for these files, so this script handles archival instead. It runs daily via
+# systemd timer and for each log directory:
 #   1. Moves all log files except the most recently modified one to archive/ (uncompressed)
 #   2. Compresses all uncompressed logs in archive/ except the most recently moved one
 #   3. Deletes archives older than the retention period
@@ -15,12 +16,13 @@
 # Directories handled:
 #   logs/backups/configs-backup/ backup-*.log
 #   logs/backups/consolidated/   run-*.log
-#   logs/backups/docker-logs/   docker-logs-export_*.log
-#   logs/backups/foundry/       backup-*.log
-#   logs/backups/heartbeat/     heartbeat-*.log
-#   logs/backups/logs-backup/   backup-*.log
-#   logs/backups/postgres-diff/ diff-backup-*.log
-#   logs/backups/postgres-full/ full-backup-*.log
+#   logs/backups/docker-logs/    docker-logs-export_*.log
+#   logs/backups/foundry/        backup-*.log
+#   logs/backups/heartbeat/      heartbeat-*.log
+#   logs/backups/logs-backup/    backup-*.log
+#   logs/backups/postgres-diff/  diff-backup-*.log
+#   logs/backups/postgres-full/  full-backup-*.log
+#   logs/restore/                restore-test-*.log
 
 set -euo pipefail
 
@@ -28,10 +30,12 @@ SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 STACK_DIR="$(realpath "$SCRIPT_DIR/../..")"
 
 BACKUPS_LOG_DIR="$STACK_DIR/logs/backups"
+RESTORE_LOG_DIR="$STACK_DIR/logs/restore"
 RETAIN_DAYS=60
 
-echo "=== Backup Log Archive Started ==="
-echo "Log base directory: $BACKUPS_LOG_DIR"
+echo "=== Log Archive Started ==="
+echo "Backup log base: $BACKUPS_LOG_DIR"
+echo "Restore log base: $RESTORE_LOG_DIR"
 echo "Retaining archives for $RETAIN_DAYS days"
 echo ""
 
@@ -116,5 +120,6 @@ archive_logs "$BACKUPS_LOG_DIR/heartbeat"      "heartbeat-*.log"
 archive_logs "$BACKUPS_LOG_DIR/logs-backup"    "backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-diff"  "diff-backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/postgres-full"  "full-backup-*.log"
+archive_logs "$RESTORE_LOG_DIR"               "restore-test-*.log"
 
-echo "=== Backup Log Archive Complete ==="
+echo "=== Log Archive Complete ==="

@@ -51,10 +51,12 @@ install_unit "${SCRIPT_DIR}/logs/logs-backup.service" "${SYSTEMD_DIR}/logs-backu
 install_unit "${SCRIPT_DIR}/configs/configs-backup.service" "${SYSTEMD_DIR}/configs-backup.service"
 install_unit "${SCRIPT_DIR}/orchestration/consolidated-backup.service" "${SYSTEMD_DIR}/consolidated-backup.service"
 install_unit "${SCRIPT_DIR}/orchestration/consolidated-backup.timer" "${SYSTEMD_DIR}/consolidated-backup.timer"
+install_unit "${SCRIPT_DIR}/orchestration/restore-test.service" "${SYSTEMD_DIR}/restore-test.service"
+install_unit "${SCRIPT_DIR}/orchestration/restore-test.timer" "${SYSTEMD_DIR}/restore-test.timer"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.service" "${SYSTEMD_DIR}/postgresql-log-archive.service"
 install_unit "${STACK_DIR}/infra/db/postgresql-log-archive.timer" "${SYSTEMD_DIR}/postgresql-log-archive.timer"
-install_unit "${STACK_DIR}/infra/backups/backups-log-archive.service" "${SYSTEMD_DIR}/backups-log-archive.service"
-install_unit "${STACK_DIR}/infra/backups/backups-log-archive.timer" "${SYSTEMD_DIR}/backups-log-archive.timer"
+install_unit "${STACK_DIR}/infra/logs/log-archive.service" "${SYSTEMD_DIR}/log-archive.service"
+install_unit "${STACK_DIR}/infra/logs/log-archive.timer" "${SYSTEMD_DIR}/log-archive.timer"
 
 # Install failure alert template service (with substitution)
 install_unit "${SCRIPT_DIR}/monitoring/backup-failure-alert@.service" "${SYSTEMD_DIR}/backup-failure-alert@.service"
@@ -73,7 +75,7 @@ fi
 echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer; do
+for timer in consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer log-archive.timer restore-test.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
     else
@@ -96,6 +98,8 @@ fi
 # Default ACLs ensure future files created by root/systemd automatically inherit access.
 echo "Setting up log directories..."
 mkdir -p \
+    "$STACK_DIR/logs/restore" \
+    "$STACK_DIR/logs/restore/postgresql" \
     "$STACK_DIR/logs/backups/postgres-full" \
     "$STACK_DIR/logs/backups/postgres-diff" \
     "$STACK_DIR/logs/backups/foundry" \
@@ -107,9 +111,9 @@ mkdir -p \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"
 # Capital X: sets execute on directories but not regular files (preserves correct file modes).
-setfacl -R -m u:"$STACK_USER":rwX "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker"
+setfacl -R -m u:"$STACK_USER":rwX "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" "$STACK_DIR/logs/restore"
 # Default ACL on every directory so future root-created files inherit access.
-find "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" -type d -exec setfacl -d -m u:"$STACK_USER":rwx {} +
+find "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" "$STACK_DIR/logs/restore" -type d -exec setfacl -d -m u:"$STACK_USER":rwx {} +
 echo "  ✓ Log directories created and ACLs applied for $STACK_USER"
 
 echo ""
@@ -123,14 +127,15 @@ echo "Backup schedule:"
 echo "  - Consolidated orchestration: Daily at 3:00 AM"
 echo "    Order: PostgreSQL (Sun=full, otherwise diff) -> Foundry -> Docker logs -> Logs S3 -> Configs S3"
 echo "  - Backup heartbeat: Daily at 3:30 AM (separate timer)"
+echo "  - Restore tests / integrity checks: Monthly on 1st Sunday at 4:00 AM"
 echo ""
 echo "Log maintenance schedule:"
 echo "  - PostgreSQL log archive: Daily at 00:20 (compress + move to archive/)"
-echo "  - Backup log archive:      Daily at 23:55 (compress + move to archive/)"
+echo "  - Log archive:             Daily at 23:55 (compress + move to archive/; covers logs/backups + logs/restore)"
 echo ""
 echo "IMPORTANT: Timers are enabled but not started to avoid triggering backups during installation."
 echo "They will start automatically on next reboot, or you can start them now:"
-echo "  sudo systemctl start consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer backups-log-archive.timer"
+echo "  sudo systemctl start consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer log-archive.timer"
 echo ""
 echo "To check timer status:"
 echo "  systemctl list-timers"
