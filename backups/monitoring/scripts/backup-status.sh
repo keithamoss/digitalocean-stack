@@ -689,7 +689,6 @@ heartbeat() {
         status_lines+=("✓ Result: \`${RESTORE_TEST_RESULT:-unknown}\` (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks)")
         status_lines+=("✓ Duration: \`${RESTORE_TEST_DURATION:-unknown}\`")
         status_lines+=("✓ Age: \`${RESTORE_TEST_AGE_DAYS:-unknown} days\`")
-        status_lines+=("✓ State log: \`${RESTORE_TEST_STATE_LOG_FILE:-unknown}\`")
     else
         status_lines+=("✗ Failed to retrieve restore-test information")
         if [[ -n "${restore_test_info:-}" ]]; then

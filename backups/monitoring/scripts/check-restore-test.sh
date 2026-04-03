@@ -23,8 +23,6 @@
 #   Error messages on stderr
 validate_restore_test_system() {
     local restore_log_dir="${STACK_DIR}/logs/restore/orchestration"
-    local state_dir="${MONITORING_DIR}/state"
-    local state_log_file="${state_dir}/restore-test-status.log"
 
     if [[ ! -d "$restore_log_dir" ]]; then
         echo "ERROR: Restore-test log directory not found: $restore_log_dir" >&2
@@ -115,13 +113,6 @@ validate_restore_test_system() {
         status="Stale"
     fi
 
-    # Persist a lightweight state log entry for dashboard/history use.
-    mkdir -p "$state_dir"
-    {
-        printf '%s run_time="%s" result=%s checks=%s/%s age_days=%s duration="%s" status=%s log_file="%s"\n' \
-            "$(date -Iseconds)" "$run_time" "$result" "$passed_checks" "$total_checks" "$age_days" "$duration" "$status" "$latest_log"
-    } >> "$state_log_file" 2>/dev/null || true
-
     jq -n \
         --arg run_time "$run_time" \
         --arg run_epoch "$run_epoch" \
@@ -134,7 +125,6 @@ validate_restore_test_system() {
         --arg freshness "$freshness" \
         --arg status "$status" \
         --arg log_file "$latest_log" \
-        --arg state_log_file "$state_log_file" \
         '{
             run_time: $run_time,
             run_epoch: $run_epoch,
@@ -146,8 +136,7 @@ validate_restore_test_system() {
             age_days: $age_days,
             freshness: $freshness,
             status: $status,
-            log_file: $log_file,
-            state_log_file: $state_log_file
+            log_file: $log_file
         }'
 
     return 0
@@ -176,7 +165,6 @@ get_restore_test_stats() {
     RESTORE_TEST_FRESHNESS=$(echo "$restore_test_info" | jq -r '.freshness')
     RESTORE_TEST_STATUS=$(echo "$restore_test_info" | jq -r '.status')
     RESTORE_TEST_LOG_FILE=$(echo "$restore_test_info" | jq -r '.log_file')
-    RESTORE_TEST_STATE_LOG_FILE=$(echo "$restore_test_info" | jq -r '.state_log_file')
 
     if [[ "$RESTORE_TEST_STATUS" == "Healthy" ]]; then
         RESTORE_TEST_STATUS_EMOJI="✓"
