@@ -109,7 +109,6 @@ mkdir -p \
     "$STACK_DIR/logs/backups/docker-logs" \
     "$STACK_DIR/logs/backups/logs-backup" \
     "$STACK_DIR/logs/backups/consolidated" \
-    "$STACK_DIR/logs/backups/restore-test" \
     "$STACK_DIR/logs/backups/configs-backup" \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"
