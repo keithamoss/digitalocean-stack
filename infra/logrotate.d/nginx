@@ -1,10 +1,10 @@
 # Log rotation for nginx running in digitalocean-stack
-# Logs located at /opt/digitalocean-stack/logs/nginx/
+# Logs located at /opt/digitalocean-stack/logs/nginx/access/ and /opt/digitalocean-stack/logs/nginx/error/
 # Format: access-YYYY.MM.DD.log, error-YYYY.MM.DD.log
 # Note: Use specific filenames to avoid rotating already-rotated files
-# Rotated logs are moved to archive/ subdirectory
+# Rotated logs are moved to archive/ subdirectories
 
-/opt/digitalocean-stack/logs/nginx/access.log /opt/digitalocean-stack/logs/nginx/error.log {
+/opt/digitalocean-stack/logs/nginx/access/access.log /opt/digitalocean-stack/logs/nginx/error/error.log {
     daily
     missingok
     rotate 60

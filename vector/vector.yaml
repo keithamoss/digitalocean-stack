@@ -17,7 +17,8 @@ sources:
   nginx_logs:
     type: file
     include:
-      - /logs/nginx/*.log
+      - /logs/nginx/access/*.log
+      - /logs/nginx/error/*.log
     read_from: end
     ignore_older: 604800
   internal_metrics:
