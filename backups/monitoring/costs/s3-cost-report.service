@@ -1,0 +1,37 @@
+[Unit]
+Description=Monthly S3 Cost Report with Trend Comparison
+After=network-online.target
+Wants=network-online.target
+OnFailure=backup-failure-alert@s3-cost-report.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=@STACK_DIR@/backups/monitoring/costs
+
+ExecStart=@STACK_DIR@/backups/monitoring/costs/s3-cost-report-wrapper.sh
+
+# Timeout: cost report is fast (S3 enumeration + API calls typically < 2 min)
+TimeoutStartSec=600
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=s3-cost-report
+
+# Restart policy
+Restart=no
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=25%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@STACK_DIR@/logs/backups/s3-cost-report @STACK_DIR@/backups/monitoring/state
+
+[Install]
+WantedBy=multi-user.target

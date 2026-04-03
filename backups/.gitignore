@@ -1,1 +1,2 @@
 secrets/restic.key
+monitoring/state/*.json

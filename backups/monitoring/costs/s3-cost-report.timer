@@ -1,0 +1,13 @@
+[Unit]
+Description=Monthly S3 Cost Report Timer (5th of month at 04:30)
+Requires=s3-cost-report.service
+
+[Timer]
+# Run on the 5th of each month at 04:30 AM
+# Scheduled after restore-test (1st Sunday ~4:00 AM) so both always run within the same month's window
+OnCalendar=*-*-5 04:30:00
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

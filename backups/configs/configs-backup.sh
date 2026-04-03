@@ -25,6 +25,9 @@
 # Extra individual files (not in secrets/ dirs):
 #   - redis/conf/users.acl     (Redis ACL - password hashes, not in version control)
 #
+# Extra directories (not secrets/ dirs):
+#   - backups/monitoring/state/  (monthly S3 cost snapshots — per-service data not rebuildable from AWS)
+#
 # Requirements:
 # - restic installed
 # - AWS credentials in backups/secrets/aws.env
@@ -111,6 +114,17 @@ for file in "${EXTRA_FILES[@]}"; do
         echo "  - ${file} (not found, skipping)"
     fi
 done
+
+# Monitoring state: monthly cost snapshots — per-service data not reconstructable from AWS
+echo "Monitoring state:"
+MONITORING_STATE_DIR="${BACKUPS_DIR}/monitoring/state"
+if [[ -d "$MONITORING_STATE_DIR" ]]; then
+    snapshot_count=$(find "$MONITORING_STATE_DIR" -maxdepth 1 -name 's3-costs-*.json' 2>/dev/null | wc -l)
+    echo "  + ${MONITORING_STATE_DIR} (${snapshot_count} cost snapshot(s))"
+    BACKUP_PATHS+=("$MONITORING_STATE_DIR")
+else
+    echo "  - ${MONITORING_STATE_DIR} (not found, skipping)"
+fi
 echo ""
 
 if [[ ${#BACKUP_PATHS[@]} -eq 0 ]]; then

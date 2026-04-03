@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh" "check-restore-test.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh" "check-restore-test.sh" "check-s3-costs.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -301,6 +301,9 @@ main() {
     if ! display_restore_test_status; then
         restore_test_status=1
     fi
+
+    # S3 Cost Baseline
+    display_s3_costs_status || true  # non-fatal: missing state file just shows reminder
 
     # 30-day consolidated success rate (subset scope)
     get_consolidated_success_stats
@@ -699,9 +702,32 @@ heartbeat() {
         exit_code=$EXIT_ERROR
     fi
 
+    # S3 Cost Baseline — read state file if available, add to Storage section
+    local cost_check_result=0
+    local cost_info
+    if cost_info=$(validate_s3_costs_system 2>&1); then
+        get_s3_costs_stats "$cost_info"
+    else
+        cost_check_result=1
+    fi
+
     status_lines+=("")
     status_lines+=("**Storage**")
-    status_lines+=("✓ S3 Repos: Operational")
+
+    if ((cost_check_result == 0)) && [[ -n "${S3_COST_REPORT_DATE:-}" ]]; then
+        local budget_icon
+        case "${S3_COST_BUDGET_STATUS:-under}" in
+            under) budget_icon="✓" ;;
+            near)  budget_icon="⚠" ;;
+            over)  budget_icon="✗" ;;
+            *)     budget_icon="?" ;;
+        esac
+        status_lines+=("${budget_icon} S3 cost est: \`AUD \$$(printf '%.4f' "${S3_COST_TOTAL_AUD:-0}")/mo\` — ${S3_COST_BUDGET_STATUS:-unknown} (budget AUD \$${S3_COST_BUDGET_AUD_VAL:-5.00})")
+        status_lines+=("  database=\`$(printf '%.4f' "${S3_COST_DATABASE_AUD:-0}")\`  foundry=\`$(printf '%.4f' "${S3_COST_FOUNDRY_AUD:-0}")\`  logs=\`$(printf '%.4f' "${S3_COST_LOGS_AUD:-0}")\`  configs=\`$(printf '%.4f' "${S3_COST_CONFIGS_AUD:-0}")\` AUD/mo")
+        status_lines+=("  Report: \`${S3_COST_REPORT_DATE}\` (${S3_COST_AGE_DAYS:-?}d ago)")
+    else
+        status_lines+=("ℹ S3 cost: no report yet — run \`backups/monitoring/costs/s3-cost-report.sh\`")
+    fi
 
     # 30-day consolidated success rate (subset scope)
     get_consolidated_success_stats
@@ -868,6 +894,14 @@ heartbeat() {
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
         fi
         has_warnings=1
+    fi
+
+    # Check S3 cost report freshness
+    if ((cost_check_result == 0)) && [[ "${S3_COST_FRESHNESS:-}" == "Stale" ]]; then
+        warning_lines+=("**Warning:** S3 cost report is stale (${S3_COST_AGE_DAYS:-?}d old; threshold ${S3_COST_STALE_DAYS}d).")
+        warning_lines+=("**Action:** Run cost report: \`backups/monitoring/costs/s3-cost-report.sh --discord\`")
+        has_warnings=1
+        [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
     fi
 
     # Check Restore Test backup freshness and result
