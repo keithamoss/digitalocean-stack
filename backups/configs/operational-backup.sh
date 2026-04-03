@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Configs Backup Script
-# Backs up all secret/credential files to S3 using restic
+# Operational Backup Script
+# Backs up secrets, credentials, and monitoring state to S3 using restic
 #
 # Retention Policy: 30 daily + monthly forever
 #   - Never commit to git (all these files are git-ignored)
@@ -67,7 +67,7 @@ export RESTIC_PASSWORD=$(cat "$BACKUPS_DIR/secrets/restic.key")
 RESTIC_REPO="$CONFIGS_RESTIC_REPO"
 
 echo "=========================================="
-echo "Configs Backup - $(date)"
+echo "Operational Backup - $(date)"
 echo "=========================================="
 echo "Repository: $RESTIC_REPO"
 echo ""
@@ -134,7 +134,7 @@ fi
 # Verify restic repository is initialized
 echo "Verifying restic repository..."
 if ! restic -r "$RESTIC_REPO" snapshots --last 2>/dev/null >/dev/null; then
-    error "Restic repository not initialized or not accessible. Run init-configs-backup.sh first."
+    error "Restic repository not initialized or not accessible. Run init-configs-backup.sh (or operational-backup.sh --init) first."
 fi
 echo "✓ Repository verified"
 echo ""

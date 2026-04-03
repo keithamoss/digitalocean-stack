@@ -46,7 +46,7 @@ export FOUNDRY_RETENTION_DAILY=30           # Keep 30 daily snapshots
 export FOUNDRY_RETENTION_MONTHLY=12         # Keep 12 monthly snapshots
 export FOUNDRY_EXPECTED_MAX_AGE_DAYS=450    # ~14 months + ~1 month buffer
 
-# Configs: Must match backups/configs/configs-backup.sh retention policy
+# Configs / Operational: Must match backups/configs/operational-backup.sh retention policy
 export CONFIGS_RETENTION_DAILY=30           # Keep 30 daily snapshots
 export CONFIGS_RETENTION_MONTHLY=9999       # Keep monthly forever (effectively unlimited)
 

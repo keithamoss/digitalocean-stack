@@ -58,7 +58,7 @@ run_phase "$POSTGRES_PHASE" "$POSTGRES_SERVICE" || true
 run_phase "Foundry Backup" "foundry-backup.service" || true
 run_phase "Docker Logs Export" "docker-logs-export.service" || true
 run_phase "Logs Backup" "logs-backup.service" || true
-run_phase "Configs Backup" "configs-backup.service" || true
+run_phase "Operational Backup" "operational-backup.service" || true
 
 # Final consolidated summary
 log ""

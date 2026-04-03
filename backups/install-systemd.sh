@@ -48,7 +48,8 @@ install_unit "${SCRIPT_DIR}/monitoring/heartbeat/backup-heartbeat.timer" "${SYST
 install_unit "${SCRIPT_DIR}/foundry/foundry-backup.service" "${SYSTEMD_DIR}/foundry-backup.service"
 install_unit "${SCRIPT_DIR}/docker/docker-logs-export.service" "${SYSTEMD_DIR}/docker-logs-export.service"
 install_unit "${SCRIPT_DIR}/logs/logs-backup.service" "${SYSTEMD_DIR}/logs-backup.service"
-install_unit "${SCRIPT_DIR}/configs/configs-backup.service" "${SYSTEMD_DIR}/configs-backup.service"
+install_unit "${SCRIPT_DIR}/configs/operational-backup.service" "${SYSTEMD_DIR}/operational-backup.service"
+install_unit "${SCRIPT_DIR}/configs/operational-backup.timer" "${SYSTEMD_DIR}/operational-backup.timer"
 install_unit "${SCRIPT_DIR}/orchestration/consolidated-backup.service" "${SYSTEMD_DIR}/consolidated-backup.service"
 install_unit "${SCRIPT_DIR}/orchestration/consolidated-backup.timer" "${SYSTEMD_DIR}/consolidated-backup.timer"
 install_unit "${SCRIPT_DIR}/orchestration/restore-test.service" "${SYSTEMD_DIR}/restore-test.service"
@@ -77,7 +78,7 @@ fi
 echo "Enabling timers..."
 FAILED_TIMERS=()
 
-for timer in consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer log-archive.timer restore-test.timer s3-cost-report.timer; do
+for timer in consolidated-backup.timer backup-heartbeat.timer postgresql-log-archive.timer log-archive.timer restore-test.timer s3-cost-report.timer operational-backup.timer; do
     if systemctl enable "$timer"; then
         echo "  ✓ Enabled $timer"
     else
@@ -111,8 +112,8 @@ mkdir -p \
     "$STACK_DIR/logs/backups/docker-logs" \
     "$STACK_DIR/logs/backups/logs-backup" \
     "$STACK_DIR/logs/backups/consolidated" \
-    "$STACK_DIR/logs/backups/configs-backup" \
     "$STACK_DIR/logs/backups/s3-cost-report" \
+    "$STACK_DIR/logs/backups/operational-backup" \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"
 # tmp/ is used by restore-test.sh scripts as a Docker-visible staging area.

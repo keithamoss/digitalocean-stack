@@ -1,8 +1,8 @@
 [Unit]
-Description=Configs Backup to S3
+Description=Operational Backup to S3 (secrets, credentials, monitoring state)
 After=network-online.target
 Wants=network-online.target
-OnFailure=backup-failure-alert@configs-backup.service
+OnFailure=backup-failure-alert@operational-backup.service
 
 [Service]
 Type=oneshot
@@ -12,7 +12,7 @@ Group=@STACK_USER@
 WorkingDirectory=@STACK_DIR@/backups/configs
 
 # Run backup via wrapper script
-ExecStart=@STACK_DIR@/backups/configs/backup-wrapper.sh
+ExecStart=@STACK_DIR@/backups/configs/operational-backup-wrapper.sh
 
 # Timeout after 10 minutes (configs are tiny, should be very fast)
 TimeoutStartSec=600
@@ -20,7 +20,7 @@ TimeoutStartSec=600
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=configs-backup
+SyslogIdentifier=operational-backup
 
 # Restart policy
 Restart=no

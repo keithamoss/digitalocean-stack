@@ -1,6 +1,6 @@
 #!/bin/bash
-# Configs Backup Status Check (restic)
-# Provides functions to check and report configs backup status
+# Operational Backup Status Check (restic)
+# Provides functions to check and report operational backup status
 #
 # This script is sourced by backup-status.sh, not run directly
 #
@@ -211,11 +211,11 @@ get_configs_backup_stats() {
 # Returns:
 #   0 if all checks pass, 1 if warnings detected
 display_configs_status() {
-    echo -e "\n${BLUE}--- Configs (restic) ---${NC}"
+    echo -e "\n${BLUE}--- Operational Backup (restic) ---${NC}"
 
     local configs_info
     if ! configs_info=$(validate_configs_backup_system 2>&1); then
-        echo -e "${RED}✗ Configs backup validation failed${NC}"
+        echo -e "${RED}✗ Operational backup validation failed${NC}"
         echo -e "${RED}${configs_info}${NC}"
         return 1
     fi

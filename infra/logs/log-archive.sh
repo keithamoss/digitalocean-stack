@@ -14,7 +14,7 @@
 # Modelled on infra/db/postgresql-log-archive.sh.
 #
 # Directories handled:
-#   logs/backups/configs-backup/ backup-*.log
+#   logs/backups/operational-backup/ backup-*.log
 #   logs/backups/consolidated/   run-*.log
 #   logs/backups/docker-logs/    docker-logs-export_*.log
 #   logs/backups/foundry/        backup-*.log
@@ -114,7 +114,7 @@ archive_logs() {
     echo ""
 }
 
-archive_logs "$BACKUPS_LOG_DIR/configs-backup" "backup-*.log"
+archive_logs "$BACKUPS_LOG_DIR/operational-backup" "backup-*.log"
 archive_logs "$BACKUPS_LOG_DIR/consolidated"   "run-*.log"
 archive_logs "$BACKUPS_LOG_DIR/docker-logs"    "docker-logs-export_*.log"
 archive_logs "$BACKUPS_LOG_DIR/foundry"        "backup-*.log"

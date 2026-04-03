@@ -1,7 +1,7 @@
 #!/bin/bash
-# Configs Backup Wrapper
+# Operational Backup Wrapper
 # Logs to both systemd journal (stdout/stderr) and file
-# Part of Phase 3 Step 2: Configuration Backup
+# Part of Phase 3 Step 2: Configuration Backup (renamed to Operational Backup 2026-04-03)
 
 set -euo pipefail
 
@@ -14,17 +14,17 @@ STACK_DIR="$(realpath "$BACKUPS_DIR/..")"
 source "${BACKUPS_DIR}/lib/wrapper-lib.sh"
 
 # Setup logging infrastructure (config.sh is loaded by setup_wrapper)
-LOG_DIR="$STACK_DIR/logs/backups/configs-backup"
+LOG_DIR="$STACK_DIR/logs/backups/operational-backup"
 setup_wrapper "$LOG_DIR" "backup"
 
 # Install timeout trap handler
 install_timeout_trap
 
 # Locate backup script
-CONFIGS_BACKUP_SCRIPT="$SCRIPT_DIR/configs-backup.sh"
+CONFIGS_BACKUP_SCRIPT="$SCRIPT_DIR/operational-backup.sh"
 
 # Start logging
-log "=== Configs Backup Started ==="
+log "=== Operational Backup Started ==="
 log "Log file: $LOG_FILE"
 log ""
 

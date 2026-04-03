@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-configs-backup.sh" "check-restore-test.sh" "check-s3-costs.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-operational-backup.sh" "check-restore-test.sh" "check-s3-costs.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -799,11 +799,11 @@ heartbeat() {
 
     # Check for timeout in Configs backup
     local configs_backup_log
-    if configs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/configs-backup" "backup"); then
+    if configs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/operational-backup" "backup"); then
         if check_for_timeout_in_log "$configs_backup_log"; then
             warning_lines+=("**TIMEOUT:** Configs backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u configs-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in configs-backup.service if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review logs: \`journalctl -u operational-backup.service -n 100\`")
+            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in operational-backup.service if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -885,8 +885,8 @@ heartbeat() {
 
         if ((configs_check_result != 0)) || [[ -z "${CONFIGS_SNAPSHOT_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Configs backup check failed or no backup data available.")
-            warning_lines+=("**Action:** Check systemd timer: \`systemctl status configs-backup.timer\`")
-            warning_lines+=("**Logs:** \`journalctl -u configs-backup.service -n 50\`")
+            warning_lines+=("**Action:** Check systemd timer: \`systemctl status operational-backup.timer\`")
+            warning_lines+=("**Logs:** \`journalctl -u operational-backup.service -n 50\`")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${CONFIGS_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Configs backup is stale (older than ${CONFIGS_BACKUP_STALE_HOURS} hours).")

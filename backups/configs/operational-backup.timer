@@ -1,6 +1,6 @@
 [Unit]
-Description=Configs Backup to S3 Timer
-Requires=configs-backup.service
+Description=Operational Backup to S3 Timer
+Requires=operational-backup.service
 
 [Timer]
 # Run at 3:25 AM daily (5 minutes after Logs backup at 3:20, 5 minutes before Heartbeat at 3:30)
