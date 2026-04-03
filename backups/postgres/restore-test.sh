@@ -47,8 +47,11 @@ fi
 # Container name for the validation PostgreSQL instance
 RESTORE_CONTAINER="postgres-restore-test"
 
-# Temporary directory for restore data
-TEMP_DIR="/tmp/postgres-restore-test"
+# Temporary directory for restore data.
+# Must be outside /tmp: PrivateTmp=yes in the systemd service gives the process a
+# private /tmp namespace, so Docker (which runs in the host namespace) cannot
+# bind-mount paths under /tmp written by this script.
+TEMP_DIR="${STACK_DIR}/tmp/postgres-restore-test"
 
 # Port to run restored PostgreSQL on (avoid conflicting with production :5432)
 RESTORE_PORT=5433

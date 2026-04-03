@@ -31,7 +31,7 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/logs/restore
+ReadWritePaths=@STACK_DIR@/logs/restore @STACK_DIR@/tmp
 
 [Install]
 WantedBy=multi-user.target

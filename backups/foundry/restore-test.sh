@@ -38,7 +38,10 @@ fi
 # ─── Constants ───────────────────────────────────────────────────────────────
 
 RESTORE_CONTAINER="foundry-restore-test"
-TEMP_DIR="/tmp/foundry-restore-test"
+# Must be outside /tmp: PrivateTmp=yes in the systemd service gives the process a
+# private /tmp namespace, so Docker (which runs in the host namespace) cannot
+# bind-mount paths under /tmp written by this script.
+TEMP_DIR="${STACK_DIR}/tmp/foundry-restore-test"
 FOUNDRY_IMAGE="felddy/foundryvtt:13.351"
 FOUNDRY_PORT=30002
 STARTUP_TIMEOUT=90
@@ -157,6 +160,13 @@ run_restore_phase() {
     fi
 
     log "✓ Restore completed in $(format_duration "$RESTORE_DURATION")"
+
+    # The restore runs as root (systemd), but the Foundry container starts as
+    # uid:gid 1000:1000 and fails its volume write test if /data is root-owned.
+    log "Setting ownership of restored data to 1000:1000 for Foundry container..."
+    chown -R 1000:1000 "$RESTORED_DATA_DIR"
+    log "✓ Ownership set"
+
     RESTORE_PASSED=true
     return 0
 }

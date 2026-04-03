@@ -113,6 +113,9 @@ mkdir -p \
     "$STACK_DIR/logs/backups/configs-backup" \
     "$STACK_DIR/logs/docker" \
     "$STACK_DIR/logs/db/postgresql/archive"
+# tmp/ is used by restore-test.sh scripts as a Docker-visible staging area.
+# It must exist before systemd starts the service (ReadWritePaths requires the path to exist).
+mkdir -p "$STACK_DIR/tmp"
 # Capital X: sets execute on directories but not regular files (preserves correct file modes).
 setfacl -R -m u:"$STACK_USER":rwX "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" "$STACK_DIR/logs/restore"
 # Default ACL on every directory so future root-created files inherit access.
