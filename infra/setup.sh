@@ -8,6 +8,19 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Resolve the deploy user and stack directory early — fail fast before touching anything.
+# $SUDO_USER is set by sudo to the invoking user and is always present when run correctly.
+DOCKER_USER="${SUDO_USER:?SUDO_USER is not set — run this script with sudo, not as root directly}"
+if ! id "$DOCKER_USER" >/dev/null 2>&1; then
+    echo "ERROR: SUDO_USER '$DOCKER_USER' is not a valid user account on this system." >&2
+    exit 1
+fi
+declare -r STACK_DIR=${STACK_DIR:-/apps/stack}
+
+# Temp dir for AWS CLI installer; cleaned up on any exit (success, error, or interrupt).
+AWSCLI_TMP=""
+trap '[ -n "$AWSCLI_TMP" ] && rm -rf "$AWSCLI_TMP"' EXIT
+
 # Set timezone to AWST (Australia/Perth)
 echo "==> Configuring timezone"
 if [ "$(timedatectl show -p Timezone --value)" != "Australia/Perth" ]; then
@@ -27,6 +40,12 @@ echo "==> Installing prerequisites"
 command -v git >/dev/null 2>&1 || apt install -y git
 command -v curl >/dev/null 2>&1 || apt install -y curl
 dpkg -s ca-certificates >/dev/null 2>&1 || apt install -y ca-certificates
+# acl: required by install-systemd.sh and orchestration/db.sh for setfacl on log directories
+dpkg -s acl >/dev/null 2>&1 || apt install -y acl
+# jq: required by backup monitoring Discord notifications (discord-lib.sh)
+command -v jq >/dev/null 2>&1 || apt install -y jq
+# unzip: required for AWS CLI v2 installation
+command -v unzip >/dev/null 2>&1 || apt install -y unzip
 
 # Add Docker's official GPG key
 echo "==> Adding Docker GPG key"
@@ -56,19 +75,15 @@ docker --version
 
 # Add non-root user to docker group so they can run docker commands without sudo.
 # The orchestration scripts (orchestration/*.sh) are run as this user, not as root.
-# $SUDO_USER is the user who invoked sudo — guaranteed to be set since this
-# script requires root (checked above) and must be run via sudo, not as root directly.
-DOCKER_USER="${SUDO_USER:?SUDO_USER is not set — run this script with sudo, not as root directly}"
+# DOCKER_USER and STACK_DIR are resolved at the top of this script.
 echo "==> Adding $DOCKER_USER to docker group"
 usermod -aG docker "$DOCKER_USER"
 echo "User $DOCKER_USER added to docker group. They will need to log out and back in for changes to take effect."
 
-declare -r STACK_DIR=${STACK_DIR:-/apps/stack}
-declare -r CERT_DIR=${CERT_DIR:-$STACK_DIR/nginx/certs}
-
 # Fetch the stack repo
 echo "==> Fetching stack repo into $STACK_DIR"
 mkdir -p /apps
+FRESH_CLONE=false
 if [ -d "$STACK_DIR/.git" ]; then
     git -C "$STACK_DIR" pull --ff-only
 elif [ -d "$STACK_DIR" ]; then
@@ -76,8 +91,17 @@ elif [ -d "$STACK_DIR" ]; then
     exit 1
 else
     git clone https://github.com/keithamoss/digitalocean-stack.git "$STACK_DIR"
+    FRESH_CLONE=true
 fi
 cd "$STACK_DIR"
+
+# Ensure the stack directory is owned by the deploy user, not root.
+# Only on a fresh clone: on re-runs, db/data/ is owned by the postgres container user
+# (UID 999), and a recursive chown would break it on the next container start.
+if [ "$FRESH_CLONE" = true ]; then
+    chown -R "$DOCKER_USER:$DOCKER_USER" "$STACK_DIR"
+    echo "Stack directory ownership set to $DOCKER_USER"
+fi
 
 # Create symlink for user-independent paths (used in logrotate configs and systemd units)
 echo "==> Creating symlink /opt/digitalocean-stack -> $STACK_DIR"
@@ -97,7 +121,7 @@ else
     echo "Created symlink /opt/digitalocean-stack -> $STACK_DIR"
 fi
 
-# Early check for restic encryption key (fail fast before installing packages)
+# Early check for restic encryption key (fail fast before installing backup tools)
 echo "==> Checking for restic encryption key"
 RESTIC_KEY_FILE="$STACK_DIR/backups/secrets/restic.key"
 if [ ! -f "$RESTIC_KEY_FILE" ]; then
@@ -118,6 +142,45 @@ if [ ! -f "$RESTIC_KEY_FILE" ]; then
 fi
 echo "✓ Restic encryption key found at $RESTIC_KEY_FILE"
 
+# Check for AWS credentials (required for all backup operations: pgBackRest WAL archiving,
+# restic Foundry/configs/logs repos, and S3 cost monitoring)
+echo "==> Checking for AWS credentials"
+AWS_ENV_FILE="$STACK_DIR/backups/secrets/aws.env"
+if [ ! -f "$AWS_ENV_FILE" ]; then
+    echo ""
+    echo "⚠️  ERROR: AWS credentials not found at $AWS_ENV_FILE"
+    echo ""
+    echo "For DISASTER RECOVERY: restore your credentials from the password manager:"
+    echo "  $AWS_ENV_FILE"
+    echo ""
+    echo "For NEW INSTALLATION: copy the template and fill in your IAM credentials:"
+    echo "  cp \"$STACK_DIR/backups/secrets/templates/aws.env\" \"$AWS_ENV_FILE\""
+    echo "  # Edit $AWS_ENV_FILE and add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+    echo ""
+    exit 1
+fi
+echo "✓ AWS credentials found at $AWS_ENV_FILE"
+
+# Validate that credentials are actually populated (not just an unfilled template copy)
+if ! grep -qE '^export AWS_ACCESS_KEY_ID=.+' "$AWS_ENV_FILE"; then
+    echo ""
+    echo "⚠️  ERROR: AWS_ACCESS_KEY_ID is empty in $AWS_ENV_FILE"
+    echo "  Edit the file and fill in your IAM credentials."
+    echo ""
+    exit 1
+fi
+
+# Warn if Discord webhook is missing — non-blocking, but all alerts will be silent without it
+DISCORD_ENV_FILE="$STACK_DIR/backups/secrets/discord.env"
+if [ ! -f "$DISCORD_ENV_FILE" ]; then
+    echo ""
+    echo "⚠️  WARNING: Discord webhook not configured at $DISCORD_ENV_FILE"
+    echo "  Backup failure alerts and heartbeat notifications will be silently skipped."
+    echo "  To enable: cp \"$STACK_DIR/backups/secrets/templates/discord.env\" \"$DISCORD_ENV_FILE\""
+    echo "  Then edit it to add your webhook URL."
+    echo ""
+fi
+
 # Install backup tools
 echo "==> Installing restic for Foundry backups"
 if ! command -v restic >/dev/null 2>&1; then
@@ -128,15 +191,20 @@ else
 fi
 
 # Install aws CLI v2 for logs sync
-# Not available via apt — installed from the official AWS binary (aarch64 for Raspberry Pi)
+# Not available via apt — installed from the official AWS binary.
+# Primary target is Raspberry Pi (aarch64) but x86_64 is also supported.
 echo "==> Installing aws CLI v2 for logs sync"
 if ! command -v aws >/dev/null 2>&1; then
-    apt install -y unzip curl
+    AWSCLI_ARCH=$(uname -m)
+    case "$AWSCLI_ARCH" in
+        aarch64) ;; # Raspberry Pi 64-bit
+        x86_64)  ;; # Intel/AMD
+        *) echo "ERROR: Unsupported architecture for AWS CLI install: $AWSCLI_ARCH" >&2; exit 1 ;;
+    esac
     AWSCLI_TMP=$(mktemp -d)
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWSCLI_TMP/awscliv2.zip"
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWSCLI_ARCH}.zip" -o "$AWSCLI_TMP/awscliv2.zip"
     unzip -q "$AWSCLI_TMP/awscliv2.zip" -d "$AWSCLI_TMP"
     "$AWSCLI_TMP/aws/install"
-    rm -rf "$AWSCLI_TMP"
     echo "aws CLI installed: $(aws --version)"
 else
     echo "aws CLI already installed, skipping"
@@ -202,3 +270,37 @@ fi
 # Deploy logrotate configs for all services
 echo "==> Deploying logrotate configs"
 "$STACK_DIR/infra/logrotate.d/deploy-logrotate.sh"
+
+# Install backup systemd units, timers, log directories, and ACLs.
+# This is idempotent — safe to re-run on updates.
+echo "==> Installing backup systemd units"
+"$STACK_DIR/backups/install-systemd.sh"
+
+echo ""
+echo "✓ Setup complete!"
+echo ""
+echo "=========================================================="
+echo " POST-SETUP STEPS (run as $DOCKER_USER, not root)"
+echo "=========================================================="
+echo ""
+echo " NOTE: Log out and back in first so the docker group change takes effect."
+echo ""
+echo " 1. Bring up services (run from $STACK_DIR/orchestration/):" 
+echo "      ./db.sh && ./redis.sh && ./nginx.sh && ./foundry.sh && ./cloudflared-pi-hosting.sh"
+echo ""
+echo " 2. NEW INSTALLATION ONLY — skip on disaster recovery (repos already exist):"
+echo "    Initialise restic backup repositories:"
+echo "      $STACK_DIR/backups/foundry/init-foundry-backup.sh"
+echo "      $STACK_DIR/backups/configs/init-configs-backup.sh"
+echo "      $STACK_DIR/backups/logs/init-logs-backup.sh"
+echo ""
+echo " 3. NEW INSTALLATION ONLY — skip on disaster recovery (stanza already exists):"
+echo "    Initialise pgBackRest stanza and run first full backup:"
+echo "      docker exec db /usr/local/bin/pgbackrest-wrapper --stanza=main stanza-create"
+echo "      docker exec db /usr/local/bin/pgbackrest-wrapper --stanza=main --type=full backup"
+echo ""
+echo " 4. Start backup timers immediately (or reboot — they are already enabled):"
+echo "      sudo systemctl start consolidated-backup.timer backup-heartbeat.timer"
+echo "      sudo systemctl start postgresql-log-archive.timer log-archive.timer"
+echo "      sudo systemctl start restore-test.timer s3-cost-report.timer operational-backup.timer"
+echo ""
