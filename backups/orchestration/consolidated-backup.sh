@@ -25,15 +25,18 @@ declare -a FAILED_PHASES=()
 run_phase() {
     local phase_name="$1"
     local service_name="$2"
+    local phase_start=$(date +%s)
 
     log ""
     log "--- Phase: ${phase_name} ---"
     if run_with_logging "$phase_name" systemctl start "$service_name"; then
-        log "✓ Phase succeeded: ${phase_name}"
+        local phase_secs=$(( $(date +%s) - phase_start ))
+        log "✓ Phase succeeded: ${phase_name} (phase: $(format_duration $phase_secs))"
         return 0
     else
         local exit_code=$?
-        log "✗ Phase failed: ${phase_name} (service: ${service_name}, exit: ${exit_code})"
+        local phase_secs=$(( $(date +%s) - phase_start ))
+        log "✗ Phase failed: ${phase_name} (service: ${service_name}, exit: ${exit_code}, phase: $(format_duration $phase_secs))"
         FAILED_PHASES+=("${phase_name}")
         return 1
     fi
