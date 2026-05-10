@@ -217,13 +217,14 @@ chown "$DOCKER_USER:$DOCKER_USER" "$RESTIC_KEY_FILE"
 # Secure all secret files across repository
 echo "==> Securing secret files across repository"
 SECRETS_DIRS=(
-    "$STACK_DIR/backups/secrets"      # Backup AWS, Discord, restic keys
-    "$STACK_DIR/db/secrets"            # Database credentials
-    "$STACK_DIR/demsausage/secrets"    # Demsausage app secrets
-    "$STACK_DIR/foundry/secrets"       # Foundry VTT secrets
-    "$STACK_DIR/nginx/secrets"         # Nginx/SSL secrets
-    "$STACK_DIR/orchestration/secrets" # Orchestration secrets
-    "$STACK_DIR/secrets"               # Root-level secrets
+    "$STACK_DIR/backups/secrets"       # Backup AWS, Discord, restic keys
+    "$STACK_DIR/db/secrets"             # Database credentials
+    "$STACK_DIR/demsausage/secrets"     # Demsausage app secrets
+    "$STACK_DIR/foundry/secrets"        # Foundry VTT secrets
+    "$STACK_DIR/nginx/secrets"          # Nginx/SSL secrets
+    "$STACK_DIR/orchestration/secrets"  # Orchestration secrets
+    "$STACK_DIR/secrets"                # Root-level secrets
+    "$STACK_DIR/auto-redeploy/secrets"  # Auto-redeploy Discord webhook and GitHub token
     # Note: secrets-tmpl/ intentionally excluded (templates)
 )
 
@@ -276,6 +277,32 @@ echo "==> Deploying logrotate configs"
 echo "==> Installing backup systemd units"
 "$STACK_DIR/backups/install-systemd.sh"
 
+# Install auto-redeploy systemd units, script, and log directory.
+# This is idempotent — safe to re-run on updates.
+echo "==> Installing auto-redeploy systemd units"
+"$STACK_DIR/auto-redeploy/install.sh"
+
+# Warn if auto-redeploy secrets are missing — non-blocking
+AUTO_REDEPLOY_DISCORD="$STACK_DIR/auto-redeploy/secrets/discord.env"
+if [ ! -f "$AUTO_REDEPLOY_DISCORD" ]; then
+    echo ""
+    echo "⚠️  WARNING: Auto-redeploy Discord webhook not configured at $AUTO_REDEPLOY_DISCORD"
+    echo "  Deployment alerts will be silently skipped without it."
+    echo "  To enable: cp \"$STACK_DIR/auto-redeploy/secrets/templates/discord.env\" \"$AUTO_REDEPLOY_DISCORD\""
+    echo "  Then edit it to add your webhook URL."
+    echo ""
+fi
+
+AUTO_REDEPLOY_GITHUB="$STACK_DIR/auto-redeploy/secrets/github.env"
+if [ ! -f "$AUTO_REDEPLOY_GITHUB" ]; then
+    echo "⚠️  WARNING: Auto-redeploy GitHub token not configured at $AUTO_REDEPLOY_GITHUB"
+    echo "  1-minute polling requires a token (unauthenticated limit: 60 req/hr)."
+    echo "  Without it, set OnUnitInactiveSec=5min in auto-redeploy.timer."
+    echo "  To enable: cp \"$STACK_DIR/auto-redeploy/secrets/templates/github.env\" \"$AUTO_REDEPLOY_GITHUB\""
+    echo "  Then edit it to add your fine-grained PAT (read-only Actions scope)."
+    echo ""
+fi
+
 echo ""
 echo "✓ Setup complete!"
 echo ""
@@ -303,4 +330,9 @@ echo " 4. Start backup timers immediately (or reboot — they are already enable
 echo "      sudo systemctl start consolidated-backup.timer backup-heartbeat.timer"
 echo "      sudo systemctl start postgresql-log-archive.timer log-archive.timer"
 echo "      sudo systemctl start restore-test.timer s3-cost-report.timer operational-backup.timer"
+echo ""
+echo " 5. Start auto-redeploy timer (or reboot — it is already enabled):"
+echo "      sudo systemctl start auto-redeploy.timer"
+echo "    Then enable a deployment target by running its publish.sh, e.g.:"
+echo "      $STACK_DIR/orchestration/demsausage/staging/publish.sh"
 echo ""

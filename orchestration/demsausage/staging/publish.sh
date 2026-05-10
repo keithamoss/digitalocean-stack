@@ -116,3 +116,22 @@ if [ $RELOAD_NEEDED -eq 1 ]; then
 else
     echo "No changes detected; nginx reload skipped"
 fi
+
+echo ""
+echo "==> Enabling auto-redeploy target"
+ENABLED_DIR="$ROOT_DIR/auto-redeploy/enabled"
+SYMLINK="$ENABLED_DIR/demsausage-staging.conf"
+CONF_TARGET="../../orchestration/demsausage/staging/auto-redeploy.conf"
+
+mkdir -p "$ENABLED_DIR"
+if [ -L "$SYMLINK" ]; then
+    echo "Auto-redeploy symlink already exists: $SYMLINK"
+elif [ -e "$SYMLINK" ]; then
+    echo "ERROR: $SYMLINK exists but is not a symlink" >&2
+    exit 1
+else
+    ln -s "$CONF_TARGET" "$SYMLINK"
+    echo "Created symlink: $SYMLINK -> $CONF_TARGET"
+    echo "Commit the symlink to record the enabled state in git:"
+    echo "  git add auto-redeploy/enabled/demsausage-staging.conf && git commit -m 'Enable demsausage-staging auto-redeploy'"
+fi

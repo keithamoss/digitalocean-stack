@@ -1,0 +1,24 @@
+[Unit]
+Description=Auto-redeploy service — polls GitHub Actions and deploys on new builds
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=@STACK_USER@
+ExecStart=/usr/local/bin/auto-redeploy.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=auto-redeploy
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# The script writes to logs/auto-redeploy/ and auto-redeploy/state/ only
+ReadWritePaths=@STACK_DIR@/logs/auto-redeploy @STACK_DIR@/auto-redeploy/state
+
+# Hard ceiling above the 10-minute software watch loop timeout
+RuntimeMaxSec=15min

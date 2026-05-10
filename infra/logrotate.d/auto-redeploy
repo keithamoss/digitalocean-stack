@@ -1,0 +1,19 @@
+# Log rotation for auto-redeploy service
+# Log located at /opt/digitalocean-stack/logs/auto-redeploy/auto-redeploy.log
+# This is a continuous log (not pre-dated), so managed by logrotate (not log-archive.sh).
+
+/opt/digitalocean-stack/logs/auto-redeploy/auto-redeploy.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    dateext
+    dateyesterday
+    dateformat -%Y.%m.%d
+    extension .log
+    olddir archive
+    createolddir 755 root root
+}

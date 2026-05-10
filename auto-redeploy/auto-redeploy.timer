@@ -1,0 +1,14 @@
+[Unit]
+Description=Auto-redeploy timer — triggers auto-redeploy service periodically
+
+[Timer]
+# Fire 1 minute after the previous invocation exits — overlap is structurally impossible
+# because OnUnitInactiveSec only counts down after the service has exited.
+OnUnitInactiveSec=1min
+# Fire 2 minutes after boot (gives network and docker time to be ready)
+OnBootSec=2min
+# Catch up on a missed run after a reboot
+Persistent=true
+
+[Install]
+WantedBy=timers.target

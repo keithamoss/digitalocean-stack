@@ -45,3 +45,19 @@ else
     echo "No changes detected; nginx reload skipped."
 fi
 
+echo ""
+echo "==> Disabling auto-redeploy target"
+SYMLINK="$ROOT_DIR/auto-redeploy/enabled/demsausage-staging.conf"
+
+if [ -L "$SYMLINK" ]; then
+    rm "$SYMLINK"
+    echo "Removed symlink: $SYMLINK"
+    echo "Commit the removal to record the disabled state in git:"
+    echo "  git add auto-redeploy/enabled/demsausage-staging.conf && git commit -m 'Disable demsausage-staging auto-redeploy'"
+elif [ -e "$SYMLINK" ]; then
+    echo "ERROR: $SYMLINK exists but is not a symlink" >&2
+    exit 1
+else
+    echo "Auto-redeploy symlink not present — nothing to remove"
+fi
+
