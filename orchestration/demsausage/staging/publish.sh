@@ -12,6 +12,7 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(realpath "$SCRIPT_DIR/../../..")"
 CERT_CONF="$SCRIPT_DIR/cert.conf"
+COMPOSE_FILE="${ROOT_DIR}/demsausage/staging.yml"
 CONF_SRC="$ROOT_DIR/demsausage/nginx/conf.d"
 CONF_DEST="$ROOT_DIR/nginx/conf.d/demsausage"
 NGINX_SCRIPT="$ROOT_DIR/orchestration/nginx.sh"
@@ -34,6 +35,13 @@ fi
 
 if [ ! -d "$(dirname "$CONF_DEST")" ]; then
     echo "Nginx conf.d directory missing: $(dirname "$CONF_DEST")" >&2
+    exit 1
+fi
+
+echo "==> Checking containers are running"
+if ! docker compose -f "$COMPOSE_FILE" ps -q --status running 2>/dev/null | grep -q .; then
+    echo "ERROR: No containers are running. Start them first:" >&2
+    echo "  orchestration/demsausage/staging/deploy.sh" >&2
     exit 1
 fi
 

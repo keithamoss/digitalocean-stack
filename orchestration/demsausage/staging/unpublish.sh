@@ -11,6 +11,7 @@ fi
 
 SCRIPT_DIR="$(cd -- "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(realpath "$SCRIPT_DIR/../../..")"
+COMPOSE_FILE="${ROOT_DIR}/demsausage/staging.yml"
 CONF_DEST="$ROOT_DIR/nginx/conf.d/demsausage"
 NGINX_SCRIPT="$ROOT_DIR/orchestration/nginx.sh"
 
@@ -22,6 +23,13 @@ fi
 if [ ! -d "$(dirname "$CONF_DEST")" ]; then
     echo "Nginx conf.d directory missing: $(dirname "$CONF_DEST")" >&2
     exit 1
+fi
+
+echo "==> Stopping containers"
+if [ -f "$COMPOSE_FILE" ]; then
+    docker compose -f "$COMPOSE_FILE" stop
+else
+    echo "WARNING: Compose file not found: $COMPOSE_FILE — skipping container stop"
 fi
 
 RELOAD=0

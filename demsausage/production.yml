@@ -1,0 +1,53 @@
+networks:
+  redis:
+    external: true
+  demsausage-production:
+    # Ensure the network is created by this compose file the first time we run it
+    external: false
+    name: demsausage-production
+services:
+  demsausage:
+    image: keithmoss/demsausage-django:latest-production
+    command: supervisord
+    volumes:
+      - ../logs/demsausage-production:/app/logs:delegated
+    networks:
+      redis:
+      demsausage-production:
+        # Alias needed because the container's default DNS name is the service key ("demsausage"),
+        # which collides with the staging container when nginx joins both networks.
+        aliases:
+          - demsausage-production
+    env_file:
+      - secrets/sausage-web.env
+      - secrets/sausage-db.env
+  memcached:
+    image: memcached
+    command:
+      # 5mb to accommodate the larger polling place GeoJSON objects
+      - "--max-item-size=5242880"
+    networks:
+      demsausage-production:
+        # Alias avoids collision with the staging memcached container on the shared nginx network.
+        aliases:
+          - memcached-production
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+  rq_dashboard:
+    image: keithmoss/demsausage-rq-dashboard:latest-production
+    env_file:
+      - secrets/rq-dashboard.env
+    networks:
+      redis:
+      demsausage-production:
+        # Alias avoids collision with the staging rq_dashboard container on the shared nginx network.
+        aliases:
+          - rq-dashboard-production
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"

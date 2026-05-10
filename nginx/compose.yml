@@ -1,6 +1,8 @@
 networks:
-  demsausage:
+  demsausage-staging:
     external: true
+  # demsausage-production:
+  #   external: true
 services:
   nginx:
     image: nginx:1.23.3-alpine
@@ -14,4 +16,5 @@ services:
     ports:
       - "443:443"
     networks:
-      - demsausage
+      - demsausage-staging
+      # - demsausage-production

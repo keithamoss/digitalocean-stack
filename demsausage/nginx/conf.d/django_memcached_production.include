@@ -8,7 +8,7 @@ location /api/0.1/elections/public/ {
         # 1 = Memcached version
         # https://docs.djangoproject.com/en/2.1/topics/cache/#cache-versioning
         set $memcached_key  "demsausage:1:elections_list";
-        memcached_pass      memcached:11211;
+        memcached_pass      memcached-production:11211;
         error_page          404 = @django_fallback;
     }
 }
@@ -22,7 +22,7 @@ location /api/0.1/map/ {
 
     if ($request_method = GET) {
         set $memcached_key      "demsausage:1:election_${arg_election_id}_polling_places_geojson";
-        memcached_pass          memcached:11211;
+        memcached_pass          memcached-production:11211;
         error_page          404 = @django_fallback;
     }
 }
@@ -36,7 +36,7 @@ location /api/0.1/export/ {
 
     if ($request_method = GET) {
         set $memcached_key      "demsausage:1:election_${arg_election_id}_polling_places_json";
-        memcached_pass          memcached:11211;
+        memcached_pass          memcached-production:11211;
         error_page          404 = @django_fallback;
     }
 }
@@ -51,7 +51,7 @@ location /api/0.1/map_image/ {
     if ($request_method = GET) {
         # e.g. demsausage:1:election_/api/0.1/map_image/37/_map_export_png
         set $memcached_key      "demsausage:1:election_${uri}_map_export_png";
-        memcached_pass          memcached:11211;
+        memcached_pass          memcached-production:11211;
         error_page          404 = @django_fallback;
         
         add_header 'Cache-Control' 'no-store';
@@ -67,7 +67,7 @@ location /api/0.1/current_map_image/ {
 
     if ($request_method = GET) {
         set $memcached_key      "demsausage:1:current_election_map_export_png";
-        memcached_pass          memcached:11211;
+        memcached_pass          memcached-production:11211;
         error_page          404 = @django_fallback;
         
         add_header 'Cache-Control' 'no-store';
