@@ -60,29 +60,69 @@ send_discord() {
     printf '%b\n' "$description"
     echo "---------------------------"
     
-    # Issue 11: Better error handling - capture curl output and http status
-    local curl_output
-    local curl_exit_code
-    curl_output=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" -X POST "${DISCORD_WEBHOOK_URL}" \
-        -H "Content-Type: application/json" \
-        -d "${payload}" 2>&1) || curl_exit_code=$?
-    
-    # Check for curl failure
-    if [[ -n "${curl_exit_code:-}" ]]; then
-        echo "ERROR: curl failed with exit code ${curl_exit_code}" >&2
-        echo "Output: ${curl_output}" >&2
-        return 1
-    fi
-    
-    # Extract HTTP status code
-    local http_status=$(echo "$curl_output" | grep "HTTP_STATUS:" | cut -d: -f2)
-    
-    # Check HTTP status
-    if [[ -z "$http_status" ]] || [[ "$http_status" -lt 200 ]] || [[ "$http_status" -ge 300 ]]; then
-        echo "ERROR: Discord webhook returned HTTP status ${http_status:-unknown}" >&2
-        echo "Response: ${curl_output}" >&2
-        return 1
-    fi
-    
-    echo "Discord notification sent successfully (HTTP ${http_status})"
+    # POST to Discord webhook, with one retry on 429 (honoring retry_after).
+    local attempt header_file curl_output curl_exit_code http_status body
+    local rl_limit rl_remaining rl_reset rl_reset_after rl_scope rl_bucket retry_after
+
+    for attempt in 1 2; do
+        header_file=$(mktemp)
+        curl_exit_code=0
+
+        curl_output=$(curl -sS -D "$header_file" -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST "${DISCORD_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "${payload}" 2>&1) || curl_exit_code=$?
+
+        if [[ "$curl_exit_code" -ne 0 ]]; then
+            rm -f "$header_file"
+            echo "ERROR: curl failed with exit code ${curl_exit_code}" >&2
+            echo "Output: ${curl_output}" >&2
+            return 1
+        fi
+
+        http_status=$(echo "$curl_output" | grep "HTTP_STATUS:" | cut -d: -f2)
+        body=$(echo "$curl_output" | grep -v "^HTTP_STATUS:")
+
+        if [[ "$http_status" == "429" ]]; then
+            # Extract and log rate-limit headers for diagnostics
+            rl_limit=$(     grep -i "^X-RateLimit-Limit:"       "$header_file" | tr -d '\r' | awk '{print $2}')
+            rl_remaining=$( grep -i "^X-RateLimit-Remaining:"   "$header_file" | tr -d '\r' | awk '{print $2}')
+            rl_reset=$(     grep -i "^X-RateLimit-Reset:"       "$header_file" | tr -d '\r' | awk '{print $2}')
+            rl_reset_after=$(grep -i "^X-RateLimit-Reset-After:" "$header_file" | tr -d '\r' | awk '{print $2}')
+            rl_scope=$(     grep -i "^X-RateLimit-Scope:"       "$header_file" | tr -d '\r' | awk '{print $2}')
+            rl_bucket=$(    grep -i "^X-RateLimit-Bucket:"      "$header_file" | tr -d '\r' | awk '{print $2}')
+            rm -f "$header_file"
+
+            echo "ERROR: Discord webhook returned HTTP status 429" >&2
+            echo "Response: ${body}" >&2
+            echo "HTTP_STATUS:429" >&2
+            echo "Rate-Limit: Limit=${rl_limit:-?} Remaining=${rl_remaining:-?} Reset=${rl_reset:-?} Reset-After=${rl_reset_after:-?} Scope=${rl_scope:-?} Bucket=${rl_bucket:-?}" >&2
+
+            if [[ "$attempt" -eq 2 ]]; then
+                echo "ERROR: Failed to send Discord notification after retry" >&2
+                return 1
+            fi
+
+            # Parse retry_after from JSON body; fall back to Reset-After header or 5s
+            retry_after=$(printf '%s' "$body" | jq -r '.retry_after // empty' 2>/dev/null)
+            [[ -z "$retry_after" ]] && retry_after="${rl_reset_after:-5}"
+            echo "Rate-limited by Discord; retrying after ${retry_after}s (attempt ${attempt}/2)..." >&2
+            sleep "$retry_after"
+            continue
+        fi
+
+        rm -f "$header_file"
+
+        # Check for other HTTP failures
+        if [[ -z "$http_status" ]] || [[ "$http_status" -lt 200 ]] || [[ "$http_status" -ge 300 ]]; then
+            echo "ERROR: Discord webhook returned HTTP status ${http_status:-unknown}" >&2
+            echo "Response: ${curl_output}" >&2
+            return 1
+        fi
+
+        echo "Discord notification sent successfully (HTTP ${http_status})"
+        return 0
+    done
+
+    return 1
 }
