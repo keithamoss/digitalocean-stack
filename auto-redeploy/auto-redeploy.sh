@@ -244,7 +244,7 @@ process_target() {
 
     local cloudflare_purge="${CLOUDFLARE_PURGE:-false}"
     local cloudflare_env="${CLOUDFLARE_ENV:-}"
-    local watch_timeout_mins="${WATCH_TIMEOUT_MINS:-10}"
+    local watch_timeout_mins="${WATCH_TIMEOUT_MINS:-15}"
 
     # Read current state
     local last_seen_run_id consecutive_api_failures last_api_alert_at
