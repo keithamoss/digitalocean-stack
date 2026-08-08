@@ -1,0 +1,104 @@
+{
+  "Rules": [
+    {
+      "ID": "foundry",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pi-hosting/foundry/"
+      },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "GLACIER_IR"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "GLACIER_IR"
+        }
+      ]
+    },
+    {
+      "ID": "configs",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pi-hosting/configs/"
+      },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "Days": 180,
+          "StorageClass": "GLACIER"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "NoncurrentDays": 180,
+          "StorageClass": "GLACIER"
+        }
+      ]
+    },
+    {
+      "ID": "database",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pi-hosting/database/"
+      },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "Days": 180,
+          "StorageClass": "GLACIER"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "NoncurrentDays": 180,
+          "StorageClass": "GLACIER"
+        }
+      ]
+    },
+    {
+      "ID": "logs",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pi-hosting/logs/"
+      },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "Days": 180,
+          "StorageClass": "GLACIER"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "NoncurrentDays": 180,
+          "StorageClass": "GLACIER"
+        }
+      ]
+    }
+  ]
+}
