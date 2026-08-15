@@ -182,21 +182,21 @@ deploy() {
     fi
 
     # Step 1: Pull new images (must succeed before stopping containers)
-    log "Step 1/5: Pulling images..."
+    log "Step 1/6: Pulling images..."
     if ! docker compose -f "$compose_file" pull; then
         log "ERROR: docker compose pull failed"
         return 1
     fi
 
     # Step 2: Stop containers
-    log "Step 2/5: Stopping containers..."
+    log "Step 2/6: Stopping containers..."
     if ! docker compose -f "$compose_file" stop; then
         log "ERROR: docker compose stop failed"
         return 1
     fi
 
     # Step 3: Start updated containers
-    log "Step 3/5: Starting updated containers..."
+    log "Step 3/6: Starting updated containers..."
     if ! docker compose -f "$compose_file" up --remove-orphans --wait --wait-timeout 60 -d; then
         log "ERROR: docker compose up failed"
         return 1
@@ -212,7 +212,8 @@ deploy() {
         return 1
     fi
 
-    log "Step 3b/5: Refreshing nginx to pick up current upstream mappings..."
+    # Step 4: Refresh nginx to pick up current upstream mappings
+    log "Step 4/6: Refreshing nginx to pick up current upstream mappings..."
     if [ ! -x "$nginx_script" ]; then
         log "ERROR: nginx orchestration script not found or not executable: ${nginx_script}"
         return 1
@@ -222,13 +223,13 @@ deploy() {
         return 1
     fi
 
-    # Step 4: Prune old images (non-fatal)
-    log "Step 4/5: Pruning old images..."
+    # Step 5: Prune old images (non-fatal)
+    log "Step 5/6: Pruning old images..."
     docker image prune --force || true
 
-    # Step 5: Cloudflare cache purge (optional)
+    # Step 6: Cloudflare cache purge (optional)
     if [ "$cloudflare_purge" = "true" ] && [ -n "$cloudflare_env" ]; then
-        log "Step 5/5: Purging Cloudflare cache..."
+        log "Step 6/6: Purging Cloudflare cache..."
         if [ ! -f "$cloudflare_env" ]; then
             log "WARNING: Cloudflare env not found: ${cloudflare_env} — skipping purge"
         else
@@ -252,7 +253,7 @@ deploy() {
             fi
         fi
     else
-        log "Step 5/5: Cloudflare purge not configured — skipping"
+        log "Step 6/6: Cloudflare purge not configured — skipping"
     fi
 
     return 0
@@ -515,7 +516,7 @@ process_target() {
         return 0
     fi
 
-    if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ]; then
+    if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ] && [ "$is_rerun_attempt" != "true" ]; then
         log "Run ${run_id} has SHA ${run_sha:0:8}, which matches last deployed SHA — skipping redeploy"
         if [ "$DRY_RUN" != "true" ]; then
             update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"same_sha_skipped\"}"
@@ -523,6 +524,10 @@ process_target() {
             log "[DRY RUN] Would update state: same_sha_skipped for run ${run_id}"
         fi
         return 0
+    fi
+
+    if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ] && [ "$is_rerun_attempt" = "true" ]; then
+        log "Run ${run_id} attempt ${run_attempt} is a rerun with matching SHA ${run_sha:0:8} — redeploying by policy"
     fi
 
     # New successful build — deploy
