@@ -152,11 +152,13 @@ fetch_run_by_id() {
 deploy() {
     local target="$1" run_id="$2" sha="$3" compose_file="$4"
     local cloudflare_purge="${5:-false}" cloudflare_env="${6:-}"
+    local nginx_script="${STACK_DIR}/orchestration/nginx.sh"
 
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would run: docker compose -f ${compose_file} pull"
         log "[DRY RUN] Would run: docker compose -f ${compose_file} stop"
         log "[DRY RUN] Would run: docker compose -f ${compose_file} up --remove-orphans --wait --wait-timeout 60 -d"
+        log "[DRY RUN] Would run: ${nginx_script} --skip-download"
         log "[DRY RUN] Would run: docker image prune --force"
         [ "$cloudflare_purge" = "true" ] && log "[DRY RUN] Would purge Cloudflare cache"
         log "[DRY RUN] Deployment skipped (DRY_RUN=true)"
@@ -191,6 +193,16 @@ deploy() {
     if [ -n "$restarting" ]; then
         log "ERROR: Containers in restarting state after up:"
         while IFS= read -r line; do log "  - $line"; done <<< "$restarting"
+        return 1
+    fi
+
+    log "Step 3b/5: Refreshing nginx to pick up current upstream mappings..."
+    if [ ! -x "$nginx_script" ]; then
+        log "ERROR: nginx orchestration script not found or not executable: ${nginx_script}"
+        return 1
+    fi
+    if ! "$nginx_script" --skip-download; then
+        log "ERROR: nginx refresh failed via ${nginx_script}"
         return 1
     fi
 

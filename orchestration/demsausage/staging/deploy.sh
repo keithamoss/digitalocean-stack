@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd -- "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(realpath "$SCRIPT_DIR/../../..")"
 COMPOSE_FILE="${ROOT_DIR}/demsausage/staging.yml"
 CLOUDFLARE_ENV="${ROOT_DIR}/orchestration/secrets/cloudflare.env"
+NGINX_SCRIPT="${ROOT_DIR}/orchestration/nginx.sh"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
     echo "Compose file not found: $COMPOSE_FILE" >&2
@@ -30,6 +31,16 @@ docker compose -f "$COMPOSE_FILE" stop
 
 echo "==> Starting updated containers..."
 docker compose -f "$COMPOSE_FILE" up --remove-orphans --wait --wait-timeout 60 -d
+
+echo "==> Reloading nginx to refresh upstream DNS mappings..."
+if [ ! -x "$NGINX_SCRIPT" ]; then
+    echo "ERROR: nginx orchestration script not found or not executable: $NGINX_SCRIPT" >&2
+    exit 1
+fi
+if ! "$NGINX_SCRIPT" --skip-download; then
+    echo "ERROR: nginx refresh failed via $NGINX_SCRIPT" >&2
+    exit 1
+fi
 
 echo "==> Pruning old images..."
 docker image prune --force
