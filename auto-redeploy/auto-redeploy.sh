@@ -311,7 +311,7 @@ process_target() {
 
     # Read current state
     local last_seen_run_id last_seen_run_number last_seen_run_attempt last_seen_created_at last_seen_head_sha
-    local deployed_run_id stale_response_count last_stale_alert_at
+    local deployed_run_id deployed_run_attempt stale_response_count last_stale_alert_at
     local consecutive_api_failures last_api_alert_at
     last_seen_run_id=$(get_state_field "$state_file" "last_seen_run_id" "0")
     last_seen_run_number=$(get_state_field "$state_file" "last_seen_run_number" "0")
@@ -319,6 +319,7 @@ process_target() {
     last_seen_created_at=$(get_state_field "$state_file" "last_seen_created_at" "")
     last_seen_head_sha=$(get_state_field "$state_file" "last_seen_head_sha" "")
     deployed_run_id=$(get_state_field "$state_file" "deployed_run_id" "0")
+    deployed_run_attempt=$(get_state_field "$state_file" "deployed_run_attempt" "0")
     stale_response_count=$(get_state_field "$state_file" "stale_response_count" "0")
     last_stale_alert_at=$(get_state_field "$state_file" "last_stale_alert_at" "null")
     consecutive_api_failures=$(get_state_field "$state_file" "consecutive_api_failures" "0")
@@ -332,6 +333,18 @@ process_target() {
             update_state "$state_file" '{"last_seen_run_attempt": 1}'
         else
             log "[DRY RUN] Would migrate state: last_seen_run_attempt=1"
+        fi
+    fi
+
+    # Backward compatibility: old state files may not have deployed_run_attempt.
+    # If we have a deployed_run_id and the latest seen run matches it, assume that
+    # attempt was the deployed one so reruns can redeploy once each going forward.
+    if [ "$deployed_run_id" != "0" ] && [ "$deployed_run_attempt" = "0" ] && [ "$deployed_run_id" = "$last_seen_run_id" ] && [ "$last_seen_run_attempt" != "0" ]; then
+        deployed_run_attempt="$last_seen_run_attempt"
+        if [ "$DRY_RUN" != "true" ]; then
+            update_state "$state_file" "{\"deployed_run_attempt\": ${last_seen_run_attempt}}"
+        else
+            log "[DRY RUN] Would migrate state: deployed_run_attempt=${last_seen_run_attempt}"
         fi
     fi
 
@@ -538,8 +551,8 @@ process_target() {
         return 0
     fi
 
-    if [ "$run_id" = "$deployed_run_id" ]; then
-        log "Run ${run_id} is already deployed (deployed_run_id matches) — skipping redeploy"
+    if [ "$run_id" = "$deployed_run_id" ] && [ "$run_attempt" = "$deployed_run_attempt" ]; then
+        log "Run ${run_id} attempt ${run_attempt} is already deployed (deployed_run_id + deployed_run_attempt match) — skipping redeploy"
         if [ "$DRY_RUN" != "true" ]; then
             update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"already_deployed\"}"
         else
@@ -563,9 +576,9 @@ process_target() {
             local deployed_at
             deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             update_state "$state_file" \
-                "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"deployed_run_id\": ${run_id}, \"sha\": \"${run_sha}\", \"deployed_at\": \"${deployed_at}\", \"status\": \"success\"}"
+                "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"deployed_run_id\": ${run_id}, \"deployed_run_attempt\": ${run_attempt}, \"sha\": \"${run_sha}\", \"deployed_at\": \"${deployed_at}\", \"status\": \"success\"}"
         else
-            log "[DRY RUN] Would update state: last_seen_run_id=${run_id}, deployed_run_id=${run_id}"
+            log "[DRY RUN] Would update state: last_seen_run_id=${run_id}, deployed_run_id=${run_id}, deployed_run_attempt=${run_attempt}"
         fi
     else
         log "ERROR: Deployment failed for run ${run_id}"
