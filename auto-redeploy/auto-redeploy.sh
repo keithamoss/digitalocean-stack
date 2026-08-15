@@ -127,15 +127,31 @@ fetch_latest_run() {
     printf '%s' "$body"
 }
 
-select_latest_run() {
-    local runs_json="$1"
-    # Derive "latest" deterministically in client-side logic to avoid relying on
-    # response order from upstream APIs.
-    printf '%s' "$runs_json" | jq '
-        (.workflow_runs // [])
-        | sort_by((.run_number // 0), (.created_at // ""), (.id // 0))
-        | reverse
-        | .[0] // empty
+select_candidate_run() {
+    local runs_json="$1" last_seen_run_id="$2" last_seen_run_number="$3" last_seen_run_attempt="$4" last_seen_created_at="$5"
+    # Choose from a bounded recent window to catch reruns that are not the single
+    # most recent run while keeping API and processing cost predictable.
+    printf '%s' "$runs_json" | jq \
+        --argjson last_id "$last_seen_run_id" \
+        --argjson last_number "$last_seen_run_number" \
+        --argjson last_attempt "$last_seen_run_attempt" \
+        --arg last_created "$last_seen_created_at" '
+        def ordered:
+            (.workflow_runs // [])
+            | sort_by((.run_number // 0), (.created_at // ""), (.id // 0))
+            | reverse
+            | .[:12];
+
+        def actionable($last_id; $last_number; $last_attempt; $last_created):
+            select(
+                ((.run_number // 0) > $last_number)
+                or (((.run_number // 0) == $last_number) and ((.created_at // "") > $last_created))
+                or (((.id // 0) == $last_id) and ((.run_attempt // 1) > $last_attempt))
+            );
+
+        (ordered | map(actionable($last_id; $last_number; $last_attempt; $last_created)) | .[0])
+        // (ordered | .[0])
+        // empty
     '
 }
 
@@ -271,11 +287,12 @@ process_target() {
     local watch_timeout_mins="${WATCH_TIMEOUT_MINS:-15}"
 
     # Read current state
-    local last_seen_run_id last_seen_run_number last_seen_created_at last_seen_head_sha
+    local last_seen_run_id last_seen_run_number last_seen_run_attempt last_seen_created_at last_seen_head_sha
     local deployed_sha stale_response_count last_stale_alert_at
     local consecutive_api_failures last_api_alert_at
     last_seen_run_id=$(get_state_field "$state_file" "last_seen_run_id" "0")
     last_seen_run_number=$(get_state_field "$state_file" "last_seen_run_number" "0")
+    last_seen_run_attempt=$(get_state_field "$state_file" "last_seen_run_attempt" "0")
     last_seen_created_at=$(get_state_field "$state_file" "last_seen_created_at" "")
     last_seen_head_sha=$(get_state_field "$state_file" "last_seen_head_sha" "")
     deployed_sha=$(get_state_field "$state_file" "sha" "")
@@ -284,9 +301,20 @@ process_target() {
     consecutive_api_failures=$(get_state_field "$state_file" "consecutive_api_failures" "0")
     last_api_alert_at=$(get_state_field "$state_file" "last_api_alert_at" "null")
 
+    # Backward compatibility: old state files may not have last_seen_run_attempt.
+    # Treat that as attempt 1 when a last_seen_run_id exists to avoid false rerun detection.
+    if [ "$last_seen_run_id" != "0" ] && [ "$last_seen_run_attempt" = "0" ]; then
+        last_seen_run_attempt="1"
+        if [ "$DRY_RUN" != "true" ]; then
+            update_state "$state_file" '{"last_seen_run_attempt": 1}'
+        else
+            log "[DRY RUN] Would migrate state: last_seen_run_attempt=1"
+        fi
+    fi
+
     # Poll GitHub Actions API
     local runs_json run_json
-    if ! runs_json=$(fetch_latest_run "$GITHUB_REPO" "$WORKFLOW_FILE" "$BRANCH" "20"); then
+    if ! runs_json=$(fetch_latest_run "$GITHUB_REPO" "$WORKFLOW_FILE" "$BRANCH" "12"); then
         consecutive_api_failures=$((consecutive_api_failures + 1))
         log "GitHub API failure #${consecutive_api_failures} for ${GITHUB_REPO}/${WORKFLOW_FILE}@${BRANCH}"
 
@@ -321,7 +349,7 @@ process_target() {
         return 0
     fi
 
-    if ! run_json=$(select_latest_run "$runs_json"); then
+    if ! run_json=$(select_candidate_run "$runs_json" "$last_seen_run_id" "$last_seen_run_number" "$last_seen_run_attempt" "$last_seen_created_at"); then
         log "ERROR: Failed to parse workflow run list from GitHub API"
         return 1
     fi
@@ -339,12 +367,13 @@ process_target() {
         return 0
     fi
 
-    local run_id run_status run_conclusion run_sha run_number run_created_at
+    local run_id run_status run_conclusion run_sha run_number run_attempt run_created_at
     run_id=$(printf '%s' "$run_json" | jq -r '.id')
     run_status=$(printf '%s' "$run_json" | jq -r '.status')
     run_conclusion=$(printf '%s' "$run_json" | jq -r '.conclusion // "null"')
     run_sha=$(printf '%s' "$run_json" | jq -r '.head_sha')
     run_number=$(printf '%s' "$run_json" | jq -r '.run_number // 0')
+    run_attempt=$(printf '%s' "$run_json" | jq -r '.run_attempt // 1')
     run_created_at=$(printf '%s' "$run_json" | jq -r '.created_at // ""')
 
     # Validate run_id is a plain integer to prevent JSON injection in update_state calls
@@ -356,27 +385,41 @@ process_target() {
         log "ERROR: Unexpected run_number format from API: '${run_number}'"
         return 1
     fi
+    if ! [[ "$run_attempt" =~ ^[0-9]+$ ]]; then
+        log "ERROR: Unexpected run_attempt format from API: '${run_attempt}'"
+        return 1
+    fi
 
     # Idempotency: skip if already processed
     if [ "$run_id" = "$last_seen_run_id" ]; then
-        log "Run ${run_id} already processed — skipping"
-        if [ "$stale_response_count" != "0" ] && [ "$DRY_RUN" != "true" ]; then
-            update_state "$state_file" '{"stale_response_count": 0, "last_stale_alert_at": null}'
+        if [ "$run_attempt" -le "$last_seen_run_attempt" ]; then
+            log "Run ${run_id} attempt ${run_attempt} already processed — skipping"
+            if [ "$stale_response_count" != "0" ] && [ "$DRY_RUN" != "true" ]; then
+                update_state "$state_file" '{"stale_response_count": 0, "last_stale_alert_at": null}'
+            fi
+            return 0
         fi
-        return 0
+        log "Run ${run_id} re-run detected (attempt ${run_attempt} > ${last_seen_run_attempt}) — re-processing"
     fi
 
     # Monotonic guard: reject stale/out-of-order responses to avoid run-id flip loops.
     local is_newer=false
+    local is_rerun_attempt=false
+    if [ "$run_id" = "$last_seen_run_id" ] && [ "$run_attempt" -gt "$last_seen_run_attempt" ]; then
+        is_rerun_attempt=true
+    fi
+
     if [ "$run_number" -gt "$last_seen_run_number" ]; then
         is_newer=true
     elif [ "$run_number" -eq "$last_seen_run_number" ] && [[ "$run_created_at" > "$last_seen_created_at" ]]; then
+        is_newer=true
+    elif [ "$is_rerun_attempt" = "true" ]; then
         is_newer=true
     fi
 
     if [ "$is_newer" != "true" ]; then
         stale_response_count=$((stale_response_count + 1))
-        log "WARNING: Ignoring stale latest-run candidate (run_id=${run_id}, run_number=${run_number}, created_at=${run_created_at}); last_seen_run_id=${last_seen_run_id}, last_seen_run_number=${last_seen_run_number}, last_seen_created_at=${last_seen_created_at}"
+        log "WARNING: Ignoring stale latest-run candidate (run_id=${run_id}, run_number=${run_number}, run_attempt=${run_attempt}, created_at=${run_created_at}); last_seen_run_id=${last_seen_run_id}, last_seen_run_number=${last_seen_run_number}, last_seen_run_attempt=${last_seen_run_attempt}, last_seen_created_at=${last_seen_created_at}"
 
         local stale_should_alert=false
         if [ "$stale_response_count" -ge 3 ]; then
@@ -414,7 +457,7 @@ process_target() {
         update_state "$state_file" '{"stale_response_count": 0, "last_stale_alert_at": null}'
     fi
 
-    log "New run: ${run_id} (run_number=${run_number}, created_at=${run_created_at}, status=${run_status}, conclusion=${run_conclusion}, SHA=${run_sha:0:8})"
+    log "New run: ${run_id} (run_number=${run_number}, run_attempt=${run_attempt}, created_at=${run_created_at}, status=${run_status}, conclusion=${run_conclusion}, SHA=${run_sha:0:8})"
 
     # Enter watch loop if in-progress or queued
     if [ "$run_status" = "queued" ] || [ "$run_status" = "in_progress" ]; then
@@ -465,7 +508,7 @@ process_target() {
         log "Run ${run_id} concluded with ${run_conclusion} — skipping deployment"
         notify_failure "$target" "CI run ${run_id} concluded with ${run_conclusion} (SHA: ${run_sha:0:8})"
         if [ "$DRY_RUN" != "true" ]; then
-            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\"}"
+            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\"}"
         else
             log "[DRY RUN] Would update state: last_seen_run_id=${run_id}"
         fi
@@ -475,7 +518,7 @@ process_target() {
     if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ]; then
         log "Run ${run_id} has SHA ${run_sha:0:8}, which matches last deployed SHA — skipping redeploy"
         if [ "$DRY_RUN" != "true" ]; then
-            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"same_sha_skipped\"}"
+            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"same_sha_skipped\"}"
         else
             log "[DRY RUN] Would update state: same_sha_skipped for run ${run_id}"
         fi
@@ -497,7 +540,7 @@ process_target() {
             local deployed_at
             deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             update_state "$state_file" \
-                "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"deployed_run_id\": ${run_id}, \"sha\": \"${run_sha}\", \"deployed_at\": \"${deployed_at}\", \"status\": \"success\"}"
+                "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"deployed_run_id\": ${run_id}, \"sha\": \"${run_sha}\", \"deployed_at\": \"${deployed_at}\", \"status\": \"success\"}"
         else
             log "[DRY RUN] Would update state: last_seen_run_id=${run_id}, deployed_run_id=${run_id}"
         fi
@@ -507,7 +550,7 @@ process_target() {
         # Update last_seen_run_id so the same failed run isn't retried
         # deployed_run_id is intentionally left unchanged (still points to last good deployment)
         if [ "$DRY_RUN" != "true" ]; then
-            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\"}"
+            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\"}"
         else
             log "[DRY RUN] Would update state: last_seen_run_id=${run_id}"
         fi
