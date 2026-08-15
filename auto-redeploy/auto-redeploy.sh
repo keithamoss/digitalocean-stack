@@ -5,7 +5,7 @@
 # STACK_DIR is substituted at install time (same pattern as backups/install-systemd.sh).
 STACK_DIR="@STACK_DIR@"
 
-set -uo pipefail
+set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -110,8 +110,8 @@ github_api_call() {
 parse_api_response() {
     local response="$1"
     local http_status body
-    http_status=$(printf '%s' "$response" | grep "^HTTP_STATUS:" | cut -d: -f2)
-    body=$(printf '%s' "$response" | grep -v "^HTTP_STATUS:")
+    http_status=$(printf '%s' "$response" | awk -F: '/^HTTP_STATUS:/{print $2}' | tail -n1)
+    body=$(printf '%s' "$response" | sed '/^HTTP_STATUS:/d')
     if [ -z "$http_status" ] || [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
         return 1
     fi
@@ -167,16 +167,26 @@ fetch_run_by_id() {
 
 deploy() {
     local target="$1" run_id="$2" sha="$3" compose_file="$4"
-    local cloudflare_purge="${5:-false}" cloudflare_env="${6:-}"
+    local cloudflare_purge="${5:-false}" cloudflare_env="${6:-}" refresh_nginx="${7:-true}"
     local nginx_script="${STACK_DIR}/orchestration/nginx.sh"
 
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would run: docker compose -f ${compose_file} pull"
         log "[DRY RUN] Would run: docker compose -f ${compose_file} stop"
         log "[DRY RUN] Would run: docker compose -f ${compose_file} up --remove-orphans --wait --wait-timeout 60 -d"
-        log "[DRY RUN] Would run: ${nginx_script} --skip-download"
+        if [ "$refresh_nginx" = "true" ]; then
+            log "[DRY RUN] Would run: ${nginx_script} --skip-download"
+        else
+            log "[DRY RUN] Would skip nginx refresh (REFRESH_NGINX=false)"
+        fi
         log "[DRY RUN] Would run: docker image prune --force"
-        [ "$cloudflare_purge" = "true" ] && log "[DRY RUN] Would purge Cloudflare cache"
+        if [ "$cloudflare_purge" = "true" ]; then
+            if [ -n "$cloudflare_env" ]; then
+                log "[DRY RUN] Would purge Cloudflare cache using ${cloudflare_env}"
+            else
+                log "[DRY RUN] Would fail: CLOUDFLARE_PURGE=true but CLOUDFLARE_ENV is not set"
+            fi
+        fi
         log "[DRY RUN] Deployment skipped (DRY_RUN=true)"
         return 0
     fi
@@ -212,45 +222,56 @@ deploy() {
         return 1
     fi
 
-    # Step 4: Refresh nginx to pick up current upstream mappings
-    log "Step 4/6: Refreshing nginx to pick up current upstream mappings..."
-    if [ ! -x "$nginx_script" ]; then
-        log "ERROR: nginx orchestration script not found or not executable: ${nginx_script}"
-        return 1
-    fi
-    if ! "$nginx_script" --skip-download; then
-        log "ERROR: nginx refresh failed via ${nginx_script}"
-        return 1
+    # Step 4: Refresh nginx to pick up current upstream mappings (optional per target)
+    if [ "$refresh_nginx" = "true" ]; then
+        log "Step 4/6: Refreshing nginx to pick up current upstream mappings..."
+        if [ ! -x "$nginx_script" ]; then
+            log "ERROR: nginx orchestration script not found or not executable: ${nginx_script}"
+            return 1
+        fi
+        if ! "$nginx_script" --skip-download; then
+            log "ERROR: nginx refresh failed via ${nginx_script}"
+            return 1
+        fi
+    else
+        log "Step 4/6: Nginx refresh disabled for this target (REFRESH_NGINX=false)"
     fi
 
     # Step 5: Prune old images (non-fatal)
     log "Step 5/6: Pruning old images..."
     docker image prune --force || true
 
-    # Step 6: Cloudflare cache purge (optional)
-    if [ "$cloudflare_purge" = "true" ] && [ -n "$cloudflare_env" ]; then
+    # Step 6: Cloudflare cache purge (optional but strict when enabled)
+    if [ "$cloudflare_purge" = "true" ]; then
         log "Step 6/6: Purging Cloudflare cache..."
+        if [ -z "$cloudflare_env" ]; then
+            log "ERROR: CLOUDFLARE_PURGE=true but CLOUDFLARE_ENV is not set"
+            return 1
+        fi
         if [ ! -f "$cloudflare_env" ]; then
-            log "WARNING: Cloudflare env not found: ${cloudflare_env} — skipping purge"
+            log "ERROR: Cloudflare env not found: ${cloudflare_env}"
+            return 1
+        fi
+
+        # shellcheck source=/dev/null
+        source "$cloudflare_env"
+        if [ -z "${CF_ZONE_ID:-}" ] || [ -z "${CF_EMAIL:-}" ] || [ -z "${CF_API_KEY:-}" ]; then
+            log "ERROR: CF_ZONE_ID, CF_EMAIL, or CF_API_KEY not set"
+            return 1
+        fi
+
+        local http_status
+        http_status=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "X-Auth-Email: ${CF_EMAIL}" \
+            -H "X-Auth-Key: ${CF_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
+        if [ "$http_status" = "200" ]; then
+            log "Cloudflare cache purged (HTTP 200)"
         else
-            # shellcheck source=/dev/null
-            source "$cloudflare_env"
-            if [ -z "${CF_ZONE_ID:-}" ] || [ -z "${CF_EMAIL:-}" ] || [ -z "${CF_API_KEY:-}" ]; then
-                log "WARNING: CF_ZONE_ID, CF_EMAIL, or CF_API_KEY not set — skipping purge"
-            else
-                local http_status
-                http_status=$(curl -sS -o /dev/null -w "%{http_code}" \
-                    -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
-                    -H "X-Auth-Email: ${CF_EMAIL}" \
-                    -H "X-Auth-Key: ${CF_API_KEY}" \
-                    -H "Content-Type: application/json" \
-                    --data '{"purge_everything":true}')
-                if [ "$http_status" = "200" ]; then
-                    log "Cloudflare cache purged (HTTP 200)"
-                else
-                    log "WARNING: Cloudflare purge returned HTTP ${http_status} (non-fatal)"
-                fi
-            fi
+            log "ERROR: Cloudflare purge returned HTTP ${http_status}"
+            return 1
         fi
     else
         log "Step 6/6: Cloudflare purge not configured — skipping"
@@ -269,7 +290,7 @@ process_target() {
     log "Checking GitHub Actions..."
 
     # Unset config vars before sourcing to prevent leakage from previous target
-    unset GITHUB_REPO WORKFLOW_FILE BRANCH COMPOSE_FILE CLOUDFLARE_PURGE CLOUDFLARE_ENV WATCH_TIMEOUT_MINS
+    unset GITHUB_REPO WORKFLOW_FILE BRANCH COMPOSE_FILE CLOUDFLARE_PURGE CLOUDFLARE_ENV WATCH_TIMEOUT_MINS REFRESH_NGINX
     # shellcheck source=/dev/null
     source "$conf_file"
 
@@ -286,17 +307,18 @@ process_target() {
     local cloudflare_purge="${CLOUDFLARE_PURGE:-false}"
     local cloudflare_env="${CLOUDFLARE_ENV:-}"
     local watch_timeout_mins="${WATCH_TIMEOUT_MINS:-15}"
+    local refresh_nginx="${REFRESH_NGINX:-true}"
 
     # Read current state
     local last_seen_run_id last_seen_run_number last_seen_run_attempt last_seen_created_at last_seen_head_sha
-    local deployed_sha stale_response_count last_stale_alert_at
+    local deployed_run_id stale_response_count last_stale_alert_at
     local consecutive_api_failures last_api_alert_at
     last_seen_run_id=$(get_state_field "$state_file" "last_seen_run_id" "0")
     last_seen_run_number=$(get_state_field "$state_file" "last_seen_run_number" "0")
     last_seen_run_attempt=$(get_state_field "$state_file" "last_seen_run_attempt" "0")
     last_seen_created_at=$(get_state_field "$state_file" "last_seen_created_at" "")
     last_seen_head_sha=$(get_state_field "$state_file" "last_seen_head_sha" "")
-    deployed_sha=$(get_state_field "$state_file" "sha" "")
+    deployed_run_id=$(get_state_field "$state_file" "deployed_run_id" "0")
     stale_response_count=$(get_state_field "$state_file" "stale_response_count" "0")
     last_stale_alert_at=$(get_state_field "$state_file" "last_stale_alert_at" "null")
     consecutive_api_failures=$(get_state_field "$state_file" "consecutive_api_failures" "0")
@@ -516,25 +538,21 @@ process_target() {
         return 0
     fi
 
-    if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ] && [ "$is_rerun_attempt" != "true" ]; then
-        log "Run ${run_id} has SHA ${run_sha:0:8}, which matches last deployed SHA — skipping redeploy"
+    if [ "$run_id" = "$deployed_run_id" ]; then
+        log "Run ${run_id} is already deployed (deployed_run_id matches) — skipping redeploy"
         if [ "$DRY_RUN" != "true" ]; then
-            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"same_sha_skipped\"}"
+            update_state "$state_file" "{\"last_seen_run_id\": ${run_id}, \"last_seen_run_number\": ${run_number}, \"last_seen_run_attempt\": ${run_attempt}, \"last_seen_created_at\": \"${run_created_at}\", \"last_seen_head_sha\": \"${run_sha}\", \"status\": \"already_deployed\"}"
         else
-            log "[DRY RUN] Would update state: same_sha_skipped for run ${run_id}"
+            log "[DRY RUN] Would update state: already_deployed for run ${run_id}"
         fi
         return 0
-    fi
-
-    if [ -n "$deployed_sha" ] && [ "$run_sha" = "$deployed_sha" ] && [ "$is_rerun_attempt" = "true" ]; then
-        log "Run ${run_id} attempt ${run_attempt} is a rerun with matching SHA ${run_sha:0:8} — redeploying by policy"
     fi
 
     # New successful build — deploy
     log "New successful build (run ${run_id}). Deploying..."
 
     local deploy_ok=true
-    if ! deploy "$target" "$run_id" "$run_sha" "$COMPOSE_FILE" "$cloudflare_purge" "$cloudflare_env"; then
+    if ! deploy "$target" "$run_id" "$run_sha" "$COMPOSE_FILE" "$cloudflare_purge" "$cloudflare_env" "$refresh_nginx"; then
         deploy_ok=false
     fi
 

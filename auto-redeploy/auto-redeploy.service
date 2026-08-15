@@ -11,6 +11,7 @@ ExecStart=/usr/local/bin/auto-redeploy.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=auto-redeploy
+TimeoutStartSec=15min
 
 # Security hardening
 NoNewPrivileges=true

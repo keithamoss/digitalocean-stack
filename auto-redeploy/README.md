@@ -43,16 +43,18 @@ Optional fields:
 
 - `WATCH_TIMEOUT_MINS` (default `15`): Max watch-loop time for queued/in-progress runs.
 - `CLOUDFLARE_PURGE` (default `false`): Whether to purge Cloudflare after deploy.
-- `CLOUDFLARE_ENV`: Env file for Cloudflare credentials when purge is enabled.
+- `CLOUDFLARE_ENV`: Env file for Cloudflare credentials (required when `CLOUDFLARE_PURGE=true`).
+- `REFRESH_NGINX` (default `true`): Whether to run `orchestration/nginx.sh --skip-download` after container update.
 
-After successful container updates, auto-redeploy always refreshes nginx via:
+When `REFRESH_NGINX=true`, auto-redeploy refreshes nginx via:
 
 - `orchestration/nginx.sh --skip-download`
 
-This avoids hardcoding container names and ensures upstream mappings are refreshed consistently.
+Auto-redeploy uses run-id idempotency: if `deployed_run_id` already matches the successful run id, deployment is skipped.
 
-Auto-redeploy always skips deployment when the newest successful run has the same `head_sha` as the last deployed SHA.
-For same-SHA recovery/restart operations, use manual orchestration scripts:
+Cloudflare purge is strict when enabled: missing env file, missing required vars, or non-200 API response fails the deployment.
+
+For ad-hoc same-image recovery/restart operations, use manual orchestration scripts:
 
 - `orchestration/demsausage/staging/deploy.sh`
 - `orchestration/demsausage/production/deploy.sh`
@@ -64,9 +66,10 @@ GITHUB_REPO="keithamoss/demsausage"
 WORKFLOW_FILE="staging_cicd.yml"
 BRANCH="staging"
 COMPOSE_FILE="${STACK_DIR}/demsausage/staging.yml"
-WATCH_TIMEOUT_MINS="10"
+WATCH_TIMEOUT_MINS="15"
 CLOUDFLARE_PURGE="true"
 CLOUDFLARE_ENV="${STACK_DIR}/orchestration/secrets/cloudflare.env"
+REFRESH_NGINX="true"
 ```
 
 ## Disabling a Target
