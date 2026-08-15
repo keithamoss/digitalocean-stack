@@ -19,6 +19,3 @@ ProtectSystem=strict
 ProtectHome=read-only
 # The script writes to logs/auto-redeploy/ and auto-redeploy/state/ only
 ReadWritePaths=@STACK_DIR@/logs/auto-redeploy @STACK_DIR@/auto-redeploy/state
-
-# Hard ceiling above the 10-minute software watch loop timeout
-RuntimeMaxSec=15min
