@@ -6,9 +6,9 @@ OnFailure=backup-failure-alert@foundry-backup.service
 
 [Service]
 Type=oneshot
-# Run as stack user to access Foundry data and restic cache without permission issues
-User=@STACK_USER@
-Group=@STACK_USER@
+# Run as root to simplify backup-domain permissions
+User=root
+Group=root
 WorkingDirectory=@STACK_DIR@/backups/foundry
 
 # Run backup via wrapper script
@@ -34,4 +34,6 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=@STACK_DIR@/logs/backups/foundry @STACK_DIR@/foundry/data /home/@STACK_USER@/.cache/restic
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+ReadWritePaths=@STACK_DIR@/logs/backups/foundry @STACK_DIR@/foundry/data

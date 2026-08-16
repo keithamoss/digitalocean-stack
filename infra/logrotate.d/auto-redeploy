@@ -3,6 +3,7 @@
 # This is a continuous log (not pre-dated), so managed by logrotate (not log-archive.sh).
 
 /opt/digitalocean-stack/logs/auto-redeploy/auto-redeploy.log {
+    su keith keith
     daily
     missingok
     rotate 60
@@ -14,6 +15,7 @@
     dateyesterday
     dateformat -%Y.%m.%d
     extension .log
+    create 0644 keith keith
     olddir archive
-    createolddir 755 root root
+    createolddir 755 keith keith
 }

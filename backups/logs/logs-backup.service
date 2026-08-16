@@ -6,9 +6,9 @@ OnFailure=backup-failure-alert@logs-backup.service
 
 [Service]
 Type=oneshot
-# Run as stack user to access log files and restic cache without permission issues
-User=@STACK_USER@
-Group=@STACK_USER@
+# Run as root to simplify backup-domain permissions
+User=root
+Group=root
 WorkingDirectory=@STACK_DIR@/backups/logs
 
 # Run backup via wrapper script

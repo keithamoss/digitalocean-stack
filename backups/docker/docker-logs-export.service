@@ -7,11 +7,9 @@ OnFailure=backup-failure-alert@docker-logs-export.service
 
 [Service]
 Type=oneshot
-# Run as stack user
-User=@STACK_USER@
-Group=@STACK_USER@
-# Add user to docker group for socket access
-SupplementaryGroups=docker
+# Run as root to simplify backup-domain permissions
+User=root
+Group=root
 WorkingDirectory=@STACK_DIR@/backups/docker
 
 # Run export via wrapper script
