@@ -38,7 +38,9 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/@STACK_USER@/.cache/restic @STACK_DIR@/logs/backups/heartbeat
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+ReadWritePaths=@STACK_DIR@/logs/backups/heartbeat
 
 [Install]
 WantedBy=multi-user.target

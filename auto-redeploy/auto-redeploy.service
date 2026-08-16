@@ -6,7 +6,8 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-User=@STACK_USER@
+User=root
+Group=root
 ExecStart=/usr/local/bin/auto-redeploy.sh
 StandardOutput=journal
 StandardError=journal

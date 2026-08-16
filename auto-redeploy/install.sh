@@ -60,14 +60,12 @@ echo "  ✓ auto-redeploy.timer enabled"
 echo "Installing logrotate configs..."
 "${STACK_DIR}/infra/logrotate.d/deploy-logrotate.sh"
 
-# Create log directory and grant the stack user full access via ACLs
-# (same pattern as backups/install-systemd.sh)
+# Create log directory and normalize the root-owned contract.
+# This service is intentionally root-only under the backup-domain migration.
 echo "Setting up log directory..."
 mkdir -p "${STACK_DIR}/logs/auto-redeploy"
-# Capital X: sets execute on directories but not regular files
-setfacl -m u:"${STACK_USER}":rwX "${STACK_DIR}/logs/auto-redeploy"
-# Default ACL so future files created by root/systemd inherit access
-setfacl -d -m u:"${STACK_USER}":rwx "${STACK_DIR}/logs/auto-redeploy"
+chown root:root "${STACK_DIR}/logs/auto-redeploy"
+chmod 755 "${STACK_DIR}/logs/auto-redeploy"
 echo "  ✓ Log directory ready: ${STACK_DIR}/logs/auto-redeploy"
 
 echo ""
