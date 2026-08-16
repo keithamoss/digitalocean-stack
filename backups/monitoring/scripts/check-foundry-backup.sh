@@ -165,7 +165,7 @@ validate_foundry_backup_system() {
     
     # Determine status
     local status="Healthy"
-    if ((age_hours > 36)); then
+    if ((age_hours > FOUNDRY_BACKUP_STALE_HOURS)); then
         status="Stale"
     fi
     

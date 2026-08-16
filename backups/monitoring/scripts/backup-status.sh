@@ -17,7 +17,7 @@ DISCORD_ENV="${SECRETS_DIR}/discord.env"
 source "${BACKUPS_DIR}/config.sh"
 
 # Check required dependencies (Issue 4)
-for cmd in docker jq bc date curl restic aws; do
+for cmd in docker jq bc date curl restic aws systemctl; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "ERROR: Required command '$cmd' is not installed" >&2
         exit 1
@@ -260,6 +260,46 @@ get_consolidated_success_stats() {
     fi
 }
 
+# get_latest_consolidated_outcome
+#
+# Gets the latest consolidated run log and its outcome.
+#
+# Globals Set:
+#   LATEST_CONSOLIDATED_LOG - Full path to latest run-YYYY-MM-DD.log
+#   LATEST_CONSOLIDATED_DATE - Date extracted from filename
+#   LATEST_CONSOLIDATED_OUTCOME - success|failed|unknown|missing
+get_latest_consolidated_outcome() {
+    local consolidated_log_dir="${STACK_DIR}/logs/backups/consolidated"
+    LATEST_CONSOLIDATED_LOG=""
+    LATEST_CONSOLIDATED_DATE=""
+    LATEST_CONSOLIDATED_OUTCOME="missing"
+
+    if [[ ! -d "$consolidated_log_dir" ]]; then
+        return 1
+    fi
+
+    local latest_file
+    latest_file=$(find "$consolidated_log_dir" -maxdepth 1 -name 'run-*.log' -type f -printf '%f\n' 2>/dev/null | sort -r | head -1)
+
+    if [[ -z "$latest_file" ]]; then
+        return 1
+    fi
+
+    LATEST_CONSOLIDATED_LOG="${consolidated_log_dir}/${latest_file}"
+    LATEST_CONSOLIDATED_DATE="${latest_file#run-}"
+    LATEST_CONSOLIDATED_DATE="${LATEST_CONSOLIDATED_DATE%.log}"
+
+    if grep -q "Consolidated backup run completed successfully" "$LATEST_CONSOLIDATED_LOG"; then
+        LATEST_CONSOLIDATED_OUTCOME="success"
+    elif grep -q "Consolidated backup run completed with failures" "$LATEST_CONSOLIDATED_LOG"; then
+        LATEST_CONSOLIDATED_OUTCOME="failed"
+    else
+        LATEST_CONSOLIDATED_OUTCOME="unknown"
+    fi
+
+    return 0
+}
+
 # Main status check - console output
 main() {
     echo -e "${BLUE}=== Backup Status ===${NC}\n"
@@ -366,10 +406,10 @@ heartbeat() {
         local error_msg="${error_prefix}.\n\n**Error:** ${pg_info}\n\n"
         error_msg+="**Container:** ${POSTGRES_DB_CONTAINER}\n"
         error_msg+="**Stanza:** ${POSTGRES_STANZA}\n\n"
-        error_msg+="**Debug Steps:**\n"
-        error_msg+="1. Check container: \`docker ps | grep ${POSTGRES_DB_CONTAINER}\`\n"
-        error_msg+="2. Check pgBackRest: \`docker exec ${POSTGRES_DB_CONTAINER} pgbackrest info\`\n"
-        error_msg+="3. Review logs: \`docker logs ${POSTGRES_DB_CONTAINER} --tail 100\`"
+        error_msg+="**What to do:**\n"
+        error_msg+="1. Verify the database container is running.\n"
+        error_msg+="2. Verify pgBackRest repository access and credentials.\n"
+        error_msg+="3. Review recent database service logs."
         
         if ! send_discord "Daily Heartbeat: Critical System Error" "$error_msg" 15548997 "🚨"; then
             echo "ERROR: Failed to send Discord notification" >&2
@@ -382,9 +422,9 @@ heartbeat() {
     # Validate critical PostgreSQL variables are set (Issue 1, 4, 8, 11)
     if ! validate_numeric "${PG_LAST_BACKUP_TIME:-}" "PG_LAST_BACKUP_TIME"; then
         local error_msg="Failed to retrieve valid PostgreSQL backup timestamp.\n\n"
-        error_msg+="**Debug Steps:**\n"
-        error_msg+="1. Check info output: \`docker exec ${POSTGRES_DB_CONTAINER} pgbackrest info --stanza=${POSTGRES_STANZA}\`\n"
-        error_msg+="2. Verify backups exist in repository"
+        error_msg+="**What to do:**\n"
+        error_msg+="1. Verify pgBackRest can return backup info.\n"
+        error_msg+="2. Verify backups exist in the repository."
         
         if ! send_discord "Daily Heartbeat: Data Error" "$error_msg" 15548997 "🚨"; then
             echo "ERROR: Failed to send Discord notification" >&2
@@ -445,6 +485,25 @@ heartbeat() {
         echo "ERROR: Restore-test check failed" >&2
         echo "Error output: ${restore_test_info}" >&2
     fi
+
+    # Collect failed systemd units up front so section icons can reflect real run failures.
+    local failed_units=()
+    local unit state
+    for unit in \
+        consolidated-backup.service \
+        postgres-full-backup.service \
+        postgres-diff-backup.service \
+        foundry-backup.service \
+        docker-logs-export.service \
+        logs-backup.service \
+        operational-backup.service \
+        restore-test.service; do
+        state=$(systemctl is-failed "$unit" 2>/dev/null || true)
+        if [[ "$state" == "failed" ]]; then
+            failed_units+=("$unit")
+        fi
+    done
+    local failed_units_str=" ${failed_units[*]} "
 
     # Robust differential backup check using timestamp (Issue 1, 2, 3, 5, 8)
     # Check if last diff backup is too old, accounting for Sunday (no diff runs on Sunday)
@@ -517,10 +576,17 @@ heartbeat() {
     # Build status message using array for better maintainability - Issue 16
     local status_lines=()
     status_lines+=("**PostgreSQL (pgBackRest)**")
-    status_lines+=("✓ Last backup: \`${formatted_time}\`")
-    status_lines+=("✓ Type: \`${PG_LAST_BACKUP_TYPE}\`")
-    status_lines+=("✓ Size: \`${formatted_size}\`")
+    local postgres_icon="✓"
+    local postgres_run_status="Recent service runs are healthy"
+    if [[ "$failed_units_str" == *" postgres-full-backup.service "* ]] || [[ "$failed_units_str" == *" postgres-diff-backup.service "* ]]; then
+        postgres_icon="✗"
+        postgres_run_status="Latest scheduled PostgreSQL backup service run failed"
+    fi
+    status_lines+=("${postgres_icon} Last backup: \`${formatted_time}\`")
+    status_lines+=("${postgres_icon} Type: \`${PG_LAST_BACKUP_TYPE}\`")
+    status_lines+=("${postgres_icon} Size: \`${formatted_size}\`")
     status_lines+=("✓ PITR Range: \`${pitr_from}\` → \`${pitr_to}\`${pitr_type}")
+    status_lines+=("${postgres_icon} Run status: ${postgres_run_status}")
     
     # WAL Archive health - check for failures in past 7 days (Issue 1, 8, 9, 11)
     local wal_health_icon="✓"
@@ -578,6 +644,11 @@ heartbeat() {
     status_lines+=("")
     status_lines+=("**Foundry VTT (restic)**")
     
+    local foundry_icon="✓"
+    if [[ "$failed_units_str" == *" foundry-backup.service "* ]]; then
+        foundry_icon="✗"
+    fi
+
     if ((foundry_check_result == 0)) && [[ -n "${FOUNDRY_SNAPSHOT_TIME:-}" ]] && \
        validate_numeric "${FOUNDRY_SNAPSHOT_TIME}" "FOUNDRY_SNAPSHOT_TIME" 2>/dev/null; then
         local foundry_time=$(date -d "@${FOUNDRY_SNAPSHOT_TIME}" '+%Y-%m-%d %H:%M:%S')
@@ -589,8 +660,11 @@ heartbeat() {
             age_display="${FOUNDRY_AGE_HOURS}h ago"
         fi
         
-        status_lines+=("✓ Last backup: \`${foundry_time}\` (${age_display})")
-        status_lines+=("✓ Size: \`${foundry_size}\`")
+        status_lines+=("${foundry_icon} Last backup: \`${foundry_time}\` (${age_display})")
+        status_lines+=("${foundry_icon} Size: \`${foundry_size}\`")
+        if [[ "$foundry_icon" == "✗" ]]; then
+            status_lines+=("✗ Run status: Latest scheduled Foundry backup service run failed")
+        fi
         
         # Add oldest backup info if available (Issue 1,11,12)
         if [[ -n "${FOUNDRY_OLDEST_SNAPSHOT_TIME:-}" ]] && \
@@ -620,7 +694,7 @@ heartbeat() {
             local error_preview="${foundry_info:0:500}"
             status_lines+=("**Error:** \`${error_preview}\`")
         fi
-        status_lines+=("**Debug:** Check restic repo: \`restic -r ${FOUNDRY_RESTIC_REPO} snapshots\`")
+        status_lines+=("**What to do:** Verify Foundry restic repository access and credentials.")
         exit_code=$EXIT_ERROR
     fi
     
@@ -628,28 +702,41 @@ heartbeat() {
     status_lines+=("")
     status_lines+=("**Logs (s3 sync)**")
 
+    local logs_icon="✓"
+    if [[ "$failed_units_str" == *" logs-backup.service "* ]]; then
+        logs_icon="✗"
+    fi
+
     if ((logs_check_result == 0)) && [[ -n "${LOGS_SYNC_TIME:-}" ]]; then
         local logs_age_display="${LOGS_AGE_HOURS:-unknown}h"
         if [[ -n "${LOGS_AGE_HOURS:-}" ]] && [[ "${LOGS_AGE_HOURS}" =~ ^[0-9]+$ ]]; then
             logs_age_display="${LOGS_AGE_HOURS}h ago"
         fi
 
-        status_lines+=("✓ Last sync: \`${LOGS_SYNC_TIME}\` (${logs_age_display})")
-        status_lines+=("✓ S3 files: \`${LOGS_S3_FILES:-unknown}\`")
-        status_lines+=("✓ S3 size: \`$(format_bytes "${LOGS_S3_SIZE:-0}")\`")
+        status_lines+=("${logs_icon} Last sync: \`${LOGS_SYNC_TIME}\` (${logs_age_display})")
+        status_lines+=("${logs_icon} S3 files: \`${LOGS_S3_FILES:-unknown}\`")
+        status_lines+=("${logs_icon} S3 size: \`$(format_bytes "${LOGS_S3_SIZE:-0}")\`")
+        if [[ "$logs_icon" == "✗" ]]; then
+            status_lines+=("✗ Run status: Latest scheduled logs backup service run failed")
+        fi
     else
         status_lines+=("✗ Failed to retrieve backup information")
         if [[ -n "${logs_info:-}" ]]; then
             local logs_error_preview="${logs_info:0:500}"
             status_lines+=("**Error:** \`${logs_error_preview}\`")
         fi
-        status_lines+=("**Debug:** Check S3: \`aws s3 ls ${LOGS_S3_PATH}/\`")
+        status_lines+=("**What to do:** Verify S3 access and logs backup credentials.")
         exit_code=$EXIT_ERROR
     fi
 
     # Add Configs status
     status_lines+=("")
     status_lines+=("**Configs (restic)**")
+
+    local configs_icon="✓"
+    if [[ "$failed_units_str" == *" operational-backup.service "* ]]; then
+        configs_icon="✗"
+    fi
 
     if ((configs_check_result == 0)) && [[ -n "${CONFIGS_SNAPSHOT_TIME:-}" ]] && \
        validate_numeric "${CONFIGS_SNAPSHOT_TIME}" "CONFIGS_SNAPSHOT_TIME" 2>/dev/null; then
@@ -661,7 +748,7 @@ heartbeat() {
             configs_age_display="${CONFIGS_AGE_HOURS}h ago"
         fi
 
-        status_lines+=("✓ Last backup: \`${configs_time}\` (${configs_age_display})")
+        status_lines+=("${configs_icon} Last backup: \`${configs_time}\` (${configs_age_display})")
         local configs_file_display="${CONFIGS_SNAPSHOT_FILES:-unknown}"
         if [[ -n "${CONFIGS_FILE_DELTA:-}" ]] && [[ "${CONFIGS_FILE_DELTA}" =~ ^-?[0-9]+$ ]] && [[ "${CONFIGS_FILE_DELTA}" != "0" ]]; then
             if [[ "${CONFIGS_FILE_DELTA}" -gt 0 ]]; then
@@ -670,16 +757,19 @@ heartbeat() {
                 configs_file_display="${CONFIGS_SNAPSHOT_FILES:-unknown} (${CONFIGS_FILE_DELTA})"
             fi
         fi
-        status_lines+=("✓ Files: \`${configs_file_display}\`")
-        status_lines+=("✓ Size: \`${configs_size}\`")
-        status_lines+=("✓ Snapshots: \`${CONFIGS_TOTAL_SNAPSHOTS:-unknown}\` (30 daily + monthly forever)")
+        status_lines+=("${configs_icon} Files: \`${configs_file_display}\`")
+        status_lines+=("${configs_icon} Size: \`${configs_size}\`")
+        status_lines+=("${configs_icon} Snapshots: \`${CONFIGS_TOTAL_SNAPSHOTS:-unknown}\` (30 daily + monthly forever)")
+        if [[ "$configs_icon" == "✗" ]]; then
+            status_lines+=("✗ Run status: Latest scheduled operational backup service run failed")
+        fi
     else
         status_lines+=("✗ Failed to retrieve backup information")
         if [[ -n "${configs_info:-}" ]]; then
             local configs_error_preview="${configs_info:0:500}"
             status_lines+=("**Error:** \`${configs_error_preview}\`")
         fi
-        status_lines+=("**Debug:** Check restic repo: \`restic -r ${CONFIGS_RESTIC_REPO} snapshots\`")
+        status_lines+=("**What to do:** Verify operational restic repository access and credentials.")
         exit_code=$EXIT_ERROR
     fi
 
@@ -687,18 +777,28 @@ heartbeat() {
     status_lines+=("")
     status_lines+=("**Restore Test (monthly)**")
 
+    local restore_icon="✓"
+    if ((restore_test_check_result != 0)) || [[ "${RESTORE_TEST_RESULT:-}" == "Failed" ]] || [[ "${RESTORE_TEST_STATUS:-}" == "Stale" ]]; then
+        restore_icon="✗"
+    fi
+
     if ((restore_test_check_result == 0)) && [[ -n "${RESTORE_TEST_RUN_TIME:-}" ]]; then
-        status_lines+=("✓ Last run: \`${RESTORE_TEST_RUN_TIME}\`")
-        status_lines+=("✓ Result: \`${RESTORE_TEST_RESULT:-unknown}\` (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks)")
-        status_lines+=("✓ Duration: \`${RESTORE_TEST_DURATION:-unknown}\`")
-        status_lines+=("✓ Age: \`${RESTORE_TEST_AGE_DAYS:-unknown} days\`")
+        status_lines+=("${restore_icon} Last run: \`${RESTORE_TEST_RUN_TIME}\`")
+        status_lines+=("${restore_icon} Result: \`${RESTORE_TEST_RESULT:-unknown}\` (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks)")
+        status_lines+=("${restore_icon} Duration: \`${RESTORE_TEST_DURATION:-unknown}\`")
+        status_lines+=("${restore_icon} Age: \`${RESTORE_TEST_AGE_DAYS:-unknown} days\`")
+        if [[ "${RESTORE_TEST_RESULT:-}" == "Failed" ]]; then
+            status_lines+=("✗ Run status: Last restore test failed")
+        elif [[ "${RESTORE_TEST_STATUS:-}" == "Stale" ]]; then
+            status_lines+=("✗ Run status: Restore test is stale")
+        fi
     else
         status_lines+=("✗ Failed to retrieve restore-test information")
         if [[ -n "${restore_test_info:-}" ]]; then
             local restore_error_preview="${restore_test_info:0:500}"
             status_lines+=("**Error:** \`${restore_error_preview}\`")
         fi
-        status_lines+=("**Debug:** Check restore-test logs: \`ls -la ${STACK_DIR}/logs/restore/orchestration/\`")
+        status_lines+=("**What to do:** Review restore-test service logs and rerun the monthly test.")
         exit_code=$EXIT_ERROR
     fi
 
@@ -726,7 +826,7 @@ heartbeat() {
         status_lines+=("  database=\`$(printf '%.4f' "${S3_COST_DATABASE_AUD:-0}")\`  foundry=\`$(printf '%.4f' "${S3_COST_FOUNDRY_AUD:-0}")\`  logs=\`$(printf '%.4f' "${S3_COST_LOGS_AUD:-0}")\`  configs=\`$(printf '%.4f' "${S3_COST_CONFIGS_AUD:-0}")\` AUD/mo")
         status_lines+=("  Report: \`${S3_COST_REPORT_DATE}\` (${S3_COST_AGE_DAYS:-?}d ago)")
     else
-        status_lines+=("ℹ S3 cost: no report yet — run \`backups/monitoring/costs/s3-cost-report.sh\`")
+        status_lines+=("ℹ S3 cost: no report yet — generate the monthly cost report")
     fi
 
     # 30-day consolidated success rate (subset scope)
@@ -736,8 +836,14 @@ heartbeat() {
     status_lines+=("Scope: Consolidated run only (PostgreSQL -> Foundry -> Docker logs export -> Logs S3 -> Configs S3)")
     status_lines+=("Excludes: Standalone timers/services (e.g., heartbeat + log-archive timers)")
     if ((CONSOLIDATED_RUNS_30D > 0)); then
-        status_lines+=("✓ Consolidated success rate: \`${CONSOLIDATED_SUCCESS_RATE_30D}%\` (${CONSOLIDATED_SUCCESS_30D}/${CONSOLIDATED_RUNS_30D})")
-        status_lines+=("✓ Failed runs: \`${CONSOLIDATED_FAILED_30D}\`")
+        local reliability_icon="✓"
+        local failed_runs_icon="✓"
+        if ((CONSOLIDATED_FAILED_30D > 0)); then
+            reliability_icon="⚠"
+            failed_runs_icon="✗"
+        fi
+        status_lines+=("${reliability_icon} Consolidated success rate: \`${CONSOLIDATED_SUCCESS_RATE_30D}%\` (${CONSOLIDATED_SUCCESS_30D}/${CONSOLIDATED_RUNS_30D})")
+        status_lines+=("${failed_runs_icon} Failed runs: \`${CONSOLIDATED_FAILED_30D}\`")
         if ((CONSOLIDATED_UNKNOWN_30D > 0)); then
             status_lines+=("⚠ Unknown outcomes: \`${CONSOLIDATED_UNKNOWN_30D}\`")
         fi
@@ -754,8 +860,7 @@ heartbeat() {
     if pg_full_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/postgres-full" "full-backup"); then
         if check_for_timeout_in_log "$pg_full_log"; then
             warning_lines+=("**TIMEOUT:** PostgreSQL full backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-full-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review PostgreSQL full backup service logs and increase timeout if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -766,8 +871,7 @@ heartbeat() {
     if pg_diff_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/postgres-diff" "diff-backup"); then
         if check_for_timeout_in_log "$pg_diff_log"; then
             warning_lines+=("**TIMEOUT:** PostgreSQL differential backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u postgres-diff-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review PostgreSQL differential backup service logs and increase timeout if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -778,8 +882,7 @@ heartbeat() {
     if foundry_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/foundry" "backup"); then
         if check_for_timeout_in_log "$foundry_log"; then
             warning_lines+=("**TIMEOUT:** Foundry backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u foundry-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in service file if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review Foundry backup service logs and increase timeout if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -790,8 +893,7 @@ heartbeat() {
     if logs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/logs-backup" "backup"); then
         if check_for_timeout_in_log "$logs_backup_log"; then
             warning_lines+=("**TIMEOUT:** Logs backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u logs-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in logs-backup.service if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review logs backup service logs and increase timeout if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -802,8 +904,7 @@ heartbeat() {
     if configs_backup_log=$(get_most_recent_log "${STACK_DIR}/logs/backups/operational-backup" "backup"); then
         if check_for_timeout_in_log "$configs_backup_log"; then
             warning_lines+=("**TIMEOUT:** Configs backup exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u operational-backup.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in operational-backup.service if backups are legitimately slow.")
+            warning_lines+=("**Action:** Review operational backup service logs and increase timeout if backups are legitimately slow.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -814,8 +915,7 @@ heartbeat() {
     if restore_test_log=$(get_most_recent_log "${STACK_DIR}/logs/restore/orchestration" "restore-test"); then
         if check_for_timeout_in_log "$restore_test_log"; then
             warning_lines+=("**TIMEOUT:** Restore test exceeded systemd timeout limit.")
-            warning_lines+=("**Action:** Review logs: \`journalctl -u restore-test.service -n 100\`")
-            warning_lines+=("**Action:** Consider increasing TimeoutStartSec in restore-test.service if needed.")
+            warning_lines+=("**Action:** Review restore-test service logs and increase timeout if needed.")
             has_warnings=1
             exit_code=$EXIT_ERROR
         fi
@@ -824,8 +924,7 @@ heartbeat() {
     # Check full backup status - Issue 1
     if ((full_backup_status != 0)); then
         warning_lines+=("**Warning:** PostgreSQL full backup is overdue (older than $((MAX_FULL_BACKUP_AGE / 86400)) days).")
-        warning_lines+=("**Action:** Check systemd timer: \`systemctl status postgres-full-backup.timer\`")
-        warning_lines+=("**Logs:** \`journalctl -u postgres-full-backup.service -n 50\`")
+        warning_lines+=("**Action:** Verify PostgreSQL full backup schedule and investigate recent service failures.")
         has_warnings=1
         [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
     fi
@@ -834,8 +933,7 @@ heartbeat() {
     if ((diff_backup_status != 0)); then
         local day_name=$(date +%A)
         warning_lines+=("**Warning:** Differential backup is overdue on ${day_name}.")
-        warning_lines+=("**Action:** Check systemd timer: \`systemctl status postgres-diff-backup.timer\`")
-        warning_lines+=("**Logs:** \`journalctl -u postgres-diff-backup.service -n 50\`")
+        warning_lines+=("**Action:** Verify PostgreSQL differential backup schedule and investigate recent service failures.")
         has_warnings=1
         [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
     fi
@@ -848,8 +946,7 @@ heartbeat() {
         
         if ((foundry_check_result != 0)) || [[ -z "${FOUNDRY_SNAPSHOT_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Foundry backup check failed or no backup data available.")
-            warning_lines+=("**Action:** Check systemd timer: \`systemctl status foundry-backup.timer\`")
-            warning_lines+=("**Logs:** \`journalctl -u foundry-backup.service -n 50\`")
+            warning_lines+=("**Action:** Investigate recent Foundry backup service failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${FOUNDRY_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Foundry backup is stale (older than ${FOUNDRY_BACKUP_STALE_HOURS} hours).")
@@ -866,8 +963,7 @@ heartbeat() {
 
         if ((logs_check_result != 0)) || [[ -z "${LOGS_SYNC_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Logs backup check failed or no backup data available.")
-            warning_lines+=("**Action:** Check systemd timer: \`systemctl status logs-backup.timer\`")
-            warning_lines+=("**Logs:** \`journalctl -u logs-backup.service -n 50\`")
+            warning_lines+=("**Action:** Investigate recent logs backup service failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${LOGS_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Logs backup is stale (older than ${LOGS_BACKUP_STALE_HOURS} hours).")
@@ -885,8 +981,7 @@ heartbeat() {
 
         if ((configs_check_result != 0)) || [[ -z "${CONFIGS_SNAPSHOT_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Configs backup check failed or no backup data available.")
-            warning_lines+=("**Action:** Check systemd timer: \`systemctl status operational-backup.timer\`")
-            warning_lines+=("**Logs:** \`journalctl -u operational-backup.service -n 50\`")
+            warning_lines+=("**Action:** Investigate recent operational backup service failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${CONFIGS_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Configs backup is stale (older than ${CONFIGS_BACKUP_STALE_HOURS} hours).")
@@ -899,7 +994,7 @@ heartbeat() {
     # Check S3 cost report freshness
     if ((cost_check_result == 0)) && [[ "${S3_COST_FRESHNESS:-}" == "Stale" ]]; then
         warning_lines+=("**Warning:** S3 cost report is stale (${S3_COST_AGE_DAYS:-?}d old; threshold ${S3_COST_STALE_DAYS}d).")
-        warning_lines+=("**Action:** Run cost report: \`backups/monitoring/costs/s3-cost-report.sh --discord\`")
+        warning_lines+=("**Action:** Generate the monthly S3 cost report.")
         has_warnings=1
         [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
     fi
@@ -912,8 +1007,7 @@ heartbeat() {
 
         if ((restore_test_check_result != 0)) || [[ -z "${RESTORE_TEST_RUN_TIME:-}" ]]; then
             warning_lines+=("**Warning:** Restore-test status check failed or no restore-test data available.")
-            warning_lines+=("**Action:** Check systemd timer: \`systemctl status restore-test.timer\`")
-            warning_lines+=("**Logs:** \`journalctl -u restore-test.service -n 50\`")
+            warning_lines+=("**Action:** Investigate recent restore-test service failures.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${RESTORE_TEST_RESULT:-}" == "Failed" ]]; then
             warning_lines+=("**Warning:** Last restore test failed (${RESTORE_TEST_PASSED_CHECKS:-0}/${RESTORE_TEST_TOTAL_CHECKS:-0} checks passed).")
@@ -921,10 +1015,40 @@ heartbeat() {
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
         elif [[ "${RESTORE_TEST_STATUS:-}" == "Stale" ]]; then
             warning_lines+=("**Warning:** Restore test is stale (older than ${RESTORE_TEST_STALE_DAYS} days).")
-            warning_lines+=("**Action:** Trigger restore test manually: \`${BACKUPS_DIR}/orchestration/restore-test.sh\`")
+            warning_lines+=("**Action:** Trigger the monthly restore test manually.")
             [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
         fi
         has_warnings=1
+    fi
+
+    # Check latest consolidated run outcome directly.
+    # This promotes the most recent orchestration failure from informational to actionable.
+    local latest_consolidated_check=0
+    get_latest_consolidated_outcome || latest_consolidated_check=1
+    if ((latest_consolidated_check != 0)); then
+        warning_lines+=("**Warning:** No consolidated run log found.")
+        warning_lines+=("**Action:** Verify the consolidated backup timer and scheduler are running.")
+        has_warnings=1
+        [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+    elif [[ "${LATEST_CONSOLIDATED_OUTCOME}" == "failed" ]]; then
+        warning_lines+=("**Critical:** Latest consolidated run failed (\`${LATEST_CONSOLIDATED_DATE}\`).")
+        warning_lines+=("**Action:** Review the latest consolidated run log and identify which phase failed.")
+        warning_lines+=("**Action:** Resolve failed backup services before the next scheduled run.")
+        has_warnings=1
+        exit_code=$EXIT_ERROR
+    elif [[ "${LATEST_CONSOLIDATED_OUTCOME}" == "unknown" ]]; then
+        warning_lines+=("**Warning:** Latest consolidated run has unknown outcome (\`${LATEST_CONSOLIDATED_DATE}\`).")
+        warning_lines+=("**Action:** Review the latest consolidated run log to determine final state.")
+        has_warnings=1
+        [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+    fi
+
+    if (( ${#failed_units[@]} > 0 )); then
+        warning_lines+=("**Critical:** systemd reports failed backup units: \`${failed_units[*]}\`")
+        warning_lines+=("**Action:** Inspect each failed unit and fix underlying permission, credential, or runtime issues.")
+        warning_lines+=("**Action:** Clear failed state after remediation so future alerts reflect current status.")
+        has_warnings=1
+        exit_code=$EXIT_ERROR
     fi
     
     # Build final message from array - Issue 16
