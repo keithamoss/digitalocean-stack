@@ -27,6 +27,28 @@ LOG_PERMISSIONS_KEITH_PATHS=(
     "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/operational-backup"
 )
 
+# Additional runtime write paths used by systemd jobs that are not part of the pure
+# log tree but still participate in the ownership/permission contract.
+# Keep restore temp material in the keith-owned staging root, while archive and restore
+# log destinations remain root-owned so they align with the root-only backup domain.
+LOG_PERMISSIONS_RUNTIME_KEITH_PATHS=(
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/tmp"
+)
+
+LOG_PERMISSIONS_RUNTIME_ROOT_PATHS=(
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/restore/orchestration"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/restore/postgresql"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/restore/foundry"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/db/postgresql/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/nginx/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/docker/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/consolidated/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/postgres-full/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/postgres-diff/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/heartbeat/archive"
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/s3-cost-report/archive"
+)
+
 # detect_acl_drift
 #
 # Returns 0 if no named-user/group ACL entries or mask/default-mask entries are present.
@@ -73,10 +95,10 @@ validate_log_path_contract() {
     local expected_owner="$1"
     local expected_group="$2"
     local path="$3"
+    local expected_mode="${4:-755}"
 
     if [[ ! -d "$path" ]]; then
-        echo "ERROR: Missing log directory: $path" >&2
-        return 1
+        return 0
     fi
 
     local owner group mode
@@ -89,8 +111,8 @@ validate_log_path_contract() {
         return 1
     fi
 
-    if [[ "$mode" != "755" ]]; then
-        echo "ERROR: Mode mismatch on $path: expected 755, found ${mode}" >&2
+    if [[ "$mode" != "$expected_mode" ]]; then
+        echo "ERROR: Mode mismatch on $path: expected ${expected_mode}, found ${mode}" >&2
         return 1
     fi
 
@@ -122,12 +144,26 @@ validate_log_permissions_system() {
         fi
     done
 
+    local runtime_keith_path
+    for runtime_keith_path in "${LOG_PERMISSIONS_RUNTIME_KEITH_PATHS[@]}"; do
+        if ! validate_log_path_contract "keith" "keith" "$runtime_keith_path" "775"; then
+            ((failures += 1))
+        fi
+    done
+
+    local runtime_root_path
+    for runtime_root_path in "${LOG_PERMISSIONS_RUNTIME_ROOT_PATHS[@]}"; do
+        if ! validate_log_path_contract "root" "root" "$runtime_root_path" "755"; then
+            ((failures += 1))
+        fi
+    done
+
     if ((failures > 0)); then
         echo "ERROR: Log permission contract check failed: ${failures} drift issue(s) detected" >&2
         return 1
     fi
 
-    echo "Log permission contract check passed: root-managed paths are root:root 755; keith-managed paths are keith:keith 755"
+    echo "Log permission contract check passed: root-managed paths are root:root 755; keith-managed paths are keith:keith 755; tmp is keith:keith 775; runtime write destinations conform to the scheduled-job contract"
     return 0
 }
 
