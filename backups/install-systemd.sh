@@ -97,8 +97,7 @@ if [[ ${#FAILED_TIMERS[@]} -gt 0 ]]; then
     exit 1
 fi
 
-# Create log directories and grant the stack user full access (read, write, delete).
-# Default ACLs ensure future files created by root/systemd automatically inherit access.
+# Create required log directories.
 echo "Setting up log directories..."
 mkdir -p \
     "$STACK_DIR/logs/restore" \
@@ -119,11 +118,30 @@ mkdir -p \
 # tmp/ is used by restore-test.sh scripts as a Docker-visible staging area.
 # It must exist before systemd starts the service (ReadWritePaths requires the path to exist).
 mkdir -p "$STACK_DIR/tmp"
-# Capital X: sets execute on directories but not regular files (preserves correct file modes).
-setfacl -R -m u:"$STACK_USER":rwX "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" "$STACK_DIR/logs/restore"
-# Default ACL on every directory so future root-created files inherit access.
-find "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker" "$STACK_DIR/logs/restore" -type d -exec setfacl -d -m u:"$STACK_USER":rwx {} +
-echo "  ✓ Log directories created and ACLs applied for $STACK_USER"
+
+# Normalize root-managed log directories so reruns also fix legacy ACL drift
+# from the previous mixed-user model.
+# Keep logs/auto-redeploy out of scope because it is an explicit keith-managed
+# exception domain.
+for log_root in \
+    "$STACK_DIR/logs/backups" \
+    "$STACK_DIR/logs/docker" \
+    "$STACK_DIR/logs/restore" \
+    "$STACK_DIR/logs/db" \
+    "$STACK_DIR/logs/nginx"; do
+    if command -v setfacl >/dev/null 2>&1; then
+        setfacl -Rb "$log_root" 2>/dev/null || true
+    fi
+
+    find "$log_root" -type d -exec chown root:root {} + -exec chmod 755 {} +
+done
+
+# Backup-domain files are root-owned by contract.
+for log_root in "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker"; do
+    find "$log_root" -type f -exec chown root:root {} + -exec chmod 644 {} +
+done
+
+echo "  ✓ Log directories created and backup-domain files normalized"
 
 echo ""
 echo "✓ Installation complete! All timers are enabled."

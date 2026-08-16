@@ -30,7 +30,7 @@ if [[ -f "$DISCORD_ENV" ]]; then
 fi
 
 # Validate and load shared libraries (Issue 5)
-for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-operational-backup.sh" "check-restore-test.sh" "check-s3-costs.sh"; do
+for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh" "check-logs-backup.sh" "check-operational-backup.sh" "check-restore-test.sh" "check-s3-costs.sh" "check-log-permissions.sh"; do
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
@@ -309,6 +309,7 @@ main() {
     local logs_status=0
     local configs_status=0
     local restore_test_status=0
+    local log_permissions_status=0
     
     # PostgreSQL Backup Status
     local pg_info
@@ -342,6 +343,12 @@ main() {
         restore_test_status=1
     fi
 
+    # Log permission contract
+    echo -e "\n${BLUE}--- Log Permission Contract ---${NC}"
+    if ! validate_log_permissions_system 2>&1; then
+        log_permissions_status=1
+    fi
+
     # S3 Cost Baseline
     display_s3_costs_status || true  # non-fatal: missing state file just shows reminder
 
@@ -361,10 +368,10 @@ main() {
     fi
     
     # Overall status - Issue 17
-    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)) && ((configs_status == 0)) && ((restore_test_status == 0)); then
+    if ((pg_status == 0)) && ((foundry_status == 0)) && ((logs_status == 0)) && ((configs_status == 0)) && ((restore_test_status == 0)) && ((log_permissions_status == 0)); then
         echo -e "\n${GREEN}✓ All backup systems operational${NC}"
         return $EXIT_SUCCESS
-    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)) || ((configs_status == 2)) || ((restore_test_status == 2)); then
+    elif ((pg_status == 2)) || ((foundry_status == 2)) || ((logs_status == 2)) || ((configs_status == 2)) || ((restore_test_status == 2)) || ((log_permissions_status == 2)); then
         echo -e "\n${RED}✗ Critical backup system errors detected${NC}"
         return $EXIT_ERROR
     else
@@ -383,6 +390,7 @@ heartbeat() {
     local logs_check_result=0
     local configs_check_result=0
     local restore_test_check_result=0
+    local log_permissions_check_result=0
     local now
     now=$(date +%s)
     local exit_code=$EXIT_SUCCESS  # Track overall exit code - Issue 17
@@ -484,6 +492,14 @@ heartbeat() {
         restore_test_check_result=1
         echo "ERROR: Restore-test check failed" >&2
         echo "Error output: ${restore_test_info}" >&2
+    fi
+
+    # Check log permissions contract
+    local log_permissions_info
+    if ! log_permissions_info=$(validate_log_permissions_system 2>&1); then
+        log_permissions_check_result=1
+        echo "ERROR: Log permissions contract check failed" >&2
+        echo "Error output: ${log_permissions_info}" >&2
     fi
 
     # Collect failed systemd units up front so section icons can reflect real run failures.
@@ -802,6 +818,18 @@ heartbeat() {
         exit_code=$EXIT_ERROR
     fi
 
+    # Log Permissions section
+    status_lines+=("")
+    status_lines+=("**Log Permissions**")
+    if ((log_permissions_check_result == 0)); then
+        status_lines+=("✓ Contract status: root-managed paths are root:root 755; keith-managed paths are keith:keith 755")
+        status_lines+=("✓ ACL policy: no active ACL dependency in steady state")
+    else
+        status_lines+=("✗ Contract status: permission drift or ACL policy violation detected")
+        status_lines+=("✗ Action: review the log permission contract and normalize the affected paths")
+        exit_code=$EXIT_ERROR
+    fi
+
     # S3 Cost Baseline — read state file if available, add to Storage section
     local cost_check_result=0
     local cost_info
@@ -997,6 +1025,14 @@ heartbeat() {
         warning_lines+=("**Action:** Generate the monthly S3 cost report.")
         has_warnings=1
         [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_WARNING
+    fi
+
+    # Check log permissions contract drift
+    if ((log_permissions_check_result != 0)); then
+        warning_lines+=("**Warning:** Log permission contract check failed.")
+        warning_lines+=("**Action:** Normalize ownership, modes, and ACLs to the repo contract before the next backup cycle.")
+        has_warnings=1
+        [[ $exit_code -eq $EXIT_SUCCESS ]] && exit_code=$EXIT_ERROR
     fi
 
     # Check Restore Test backup freshness and result
