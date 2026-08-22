@@ -136,6 +136,13 @@ for log_root in \
     find "$log_root" -type d -exec chown root:root {} + -exec chmod 755 {} +
 done
 
+# PostgreSQL runs as UID/GID 999 in the container and must create rotated logs
+# in this bind-mounted directory. Its archive subdirectory remains root-managed.
+chown 999:999 "$STACK_DIR/logs/db/postgresql"
+chmod 705 "$STACK_DIR/logs/db/postgresql"
+chown root:root "$STACK_DIR/logs/db/postgresql/archive"
+chmod 755 "$STACK_DIR/logs/db/postgresql/archive"
+
 # Backup-domain files are root-owned by contract.
 for log_root in "$STACK_DIR/logs/backups" "$STACK_DIR/logs/docker"; do
     find "$log_root" -type f -exec chown root:root {} + -exec chmod 644 {} +

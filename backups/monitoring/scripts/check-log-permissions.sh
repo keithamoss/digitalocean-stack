@@ -1,6 +1,6 @@
 #!/bin/bash
 # Log Permissions Contract Check
-# Validates root-managed and keith-managed log domains match the repo contract.
+# Validates root-managed, keith-managed, and container-managed log domains.
 #
 # This script is sourced by backup-status.sh and can also be run directly.
 
@@ -25,6 +25,10 @@ LOG_PERMISSIONS_KEITH_PATHS=(
     "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/docker-logs"
     "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/logs-backup"
     "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/backups/operational-backup"
+)
+
+LOG_PERMISSIONS_POSTGRES_PATHS=(
+    "${STACK_DIR:-/home/keith/digitalocean-stack}/logs/db/postgresql"
 )
 
 # Additional runtime write paths used by systemd jobs that are not part of the pure
@@ -123,9 +127,43 @@ validate_log_path_contract() {
     return 0
 }
 
+# PostgreSQL's container user has no stable host username, so validate its
+# bind-mounted writer path using numeric UID/GID values.
+validate_numeric_log_path_contract() {
+    local expected_uid="$1"
+    local expected_gid="$2"
+    local path="$3"
+    local expected_mode="$4"
+
+    if [[ ! -d "$path" ]]; then
+        return 0
+    fi
+
+    local uid gid mode
+    uid=$(stat -c '%u' "$path" 2>/dev/null || echo "")
+    gid=$(stat -c '%g' "$path" 2>/dev/null || echo "")
+    mode=$(stat -c '%a' "$path" 2>/dev/null || echo "")
+
+    if [[ "$uid" != "$expected_uid" ]] || [[ "$gid" != "$expected_gid" ]]; then
+        echo "ERROR: Ownership mismatch on $path: expected ${expected_uid}:${expected_gid}, found ${uid}:${gid}" >&2
+        return 1
+    fi
+
+    if [[ "$mode" != "$expected_mode" ]]; then
+        echo "ERROR: Mode mismatch on $path: expected ${expected_mode}, found ${mode}" >&2
+        return 1
+    fi
+
+    if ! detect_acl_drift "$path"; then
+        return 1
+    fi
+
+    return 0
+}
+
 # validate_log_permissions_system
 #
-# Validates the repo log contract against both root-managed and keith-managed domains.
+# Validates the repo log contract across all managed ownership domains.
 # Returns 0 when all checked paths conform; 1 when drift is detected.
 validate_log_permissions_system() {
     local failures=0
@@ -140,6 +178,13 @@ validate_log_permissions_system() {
     local keith_path
     for keith_path in "${LOG_PERMISSIONS_KEITH_PATHS[@]}"; do
         if ! validate_log_path_contract "keith" "keith" "$keith_path"; then
+            ((failures += 1))
+        fi
+    done
+
+    local postgres_path
+    for postgres_path in "${LOG_PERMISSIONS_POSTGRES_PATHS[@]}"; do
+        if ! validate_numeric_log_path_contract "999" "999" "$postgres_path" "705"; then
             ((failures += 1))
         fi
     done
@@ -163,7 +208,7 @@ validate_log_permissions_system() {
         return 1
     fi
 
-    echo "Log permission contract check passed: root-managed paths are root:root 755; keith-managed paths are keith:keith 755; tmp is keith:keith 775; runtime write destinations conform to the scheduled-job contract"
+    echo "Log permission contract check passed: root-managed paths are root:root 755; keith-managed paths are keith:keith 755; PostgreSQL live logs are 999:999 705; tmp is keith:keith 775; runtime write destinations conform to the scheduled-job contract"
     return 0
 }
 
