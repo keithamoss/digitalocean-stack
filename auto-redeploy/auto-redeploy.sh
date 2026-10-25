@@ -175,7 +175,7 @@ deploy() {
         log "[DRY RUN] Would run: docker compose -f ${compose_file} stop"
         log "[DRY RUN] Would run: docker compose -f ${compose_file} up --remove-orphans --wait --wait-timeout 60 -d"
         if [ "$refresh_nginx" = "true" ]; then
-            log "[DRY RUN] Would run: ${nginx_script} --skip-download"
+            log "[DRY RUN] Would run: ${nginx_script}"
         else
             log "[DRY RUN] Would skip nginx refresh (REFRESH_NGINX=false)"
         fi
@@ -222,14 +222,14 @@ deploy() {
         return 1
     fi
 
-    # Step 4: Refresh nginx to pick up current upstream mappings (optional per target)
+    # Step 4: Download frontend artifacts and refresh nginx (optional per target)
     if [ "$refresh_nginx" = "true" ]; then
-        log "Step 4/6: Refreshing nginx to pick up current upstream mappings..."
+        log "Step 4/6: Downloading frontend artifacts and refreshing nginx..."
         if [ ! -x "$nginx_script" ]; then
             log "ERROR: nginx orchestration script not found or not executable: ${nginx_script}"
             return 1
         fi
-        if ! "$nginx_script" --skip-download; then
+        if ! "$nginx_script"; then
             log "ERROR: nginx refresh failed via ${nginx_script}"
             return 1
         fi

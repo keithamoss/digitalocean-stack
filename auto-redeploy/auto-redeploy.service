@@ -19,5 +19,5 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-# The script writes to logs/auto-redeploy/ and auto-redeploy/state/ only
-ReadWritePaths=@STACK_DIR@/logs/auto-redeploy @STACK_DIR@/auto-redeploy/state
+# The script writes deployment state, logs, and downloaded frontend artifacts.
+ReadWritePaths=@STACK_DIR@/logs/auto-redeploy @STACK_DIR@/auto-redeploy/state @STACK_DIR@/nginx/content

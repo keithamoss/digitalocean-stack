@@ -44,13 +44,13 @@ Optional fields:
 - `WATCH_TIMEOUT_MINS` (default `15`): Max watch-loop time for queued/in-progress runs.
 - `CLOUDFLARE_PURGE` (default `false`): Whether to purge Cloudflare after deploy.
 - `CLOUDFLARE_ENV`: Env file for Cloudflare credentials (required when `CLOUDFLARE_PURGE=true`).
-- `REFRESH_NGINX` (default `true`): Whether to run `orchestration/nginx.sh --skip-download` after container update.
+- `REFRESH_NGINX` (default `true`): Whether to download frontend artifacts and refresh nginx after the container update.
 
 When `REFRESH_NGINX=true`, auto-redeploy refreshes nginx via:
 
-- `orchestration/nginx.sh --skip-download`
+- `orchestration/nginx.sh`
 
-Auto-redeploy uses run-id idempotency: if `deployed_run_id` already matches the successful run id, deployment is skipped.
+Auto-redeploy uses run-id plus run-attempt idempotency: deployment is skipped only when both `deployed_run_id` and `deployed_run_attempt` already match the successful run.
 
 Cloudflare purge is strict when enabled: missing env file, missing required vars, or non-200 API response fails the deployment.
 
