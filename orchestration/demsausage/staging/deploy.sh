@@ -32,12 +32,12 @@ docker compose -f "$COMPOSE_FILE" stop
 echo "==> Starting updated containers..."
 docker compose -f "$COMPOSE_FILE" up --remove-orphans --wait --wait-timeout 60 -d
 
-echo "==> Reloading nginx to refresh upstream DNS mappings..."
+echo "==> Restarting nginx and downloading latest frontend assets..."
 if [ ! -x "$NGINX_SCRIPT" ]; then
     echo "ERROR: nginx orchestration script not found or not executable: $NGINX_SCRIPT" >&2
     exit 1
 fi
-if ! "$NGINX_SCRIPT" --skip-download; then
+if ! "$NGINX_SCRIPT"; then
     echo "ERROR: nginx refresh failed via $NGINX_SCRIPT" >&2
     exit 1
 fi
