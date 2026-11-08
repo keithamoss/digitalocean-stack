@@ -180,53 +180,77 @@ enumerate_prefix() {
     printf "  Scanning %-30s" "${prefix}/..." >&2
 
     while true; do
-        ((page++))
+        ((page += 1))
         if ((page > MAX_PAGES)); then
-            echo " WARNING: >200,000 objects (partial)" >&2
-            break
+            echo " ERROR: page limit reached for ${prefix}; refusing a partial report" >&2
+            return 1
         fi
 
-        local args=(--bucket "$BUCKET" --prefix "${prefix}/" --output json)
+        local args=(--bucket "$BUCKET" --prefix "${prefix}/" --output json --no-paginate --max-keys 1000)
         [[ -n "$next_token" ]] && args+=(--continuation-token "$next_token")
 
         local page_result
-        if ! page_result=$(aws s3api list-objects-v2 "${args[@]}" 2>/dev/null); then
-            echo " ERROR listing objects" >&2
-            break
+        if ! page_result=$(aws s3api list-objects-v2 "${args[@]}"); then
+            echo " ERROR listing objects for ${prefix} (page ${page})" >&2
+            return 1
         fi
 
-        # Accumulate items: [{class, bytes}]
-        local page_items
-        page_items=$(echo "$page_result" | \
-            jq '[.Contents[]? | {class: (.StorageClass // "STANDARD"), bytes: .Size}]')
-        combined=$(jq -n --argjson a "$combined" --argjson b "$page_items" '$a + $b')
+        # Keep only per-class totals; object lists never become command-line arguments.
+        local page_totals
+        if ! page_totals=$(printf '%s' "$page_result" | jq -ce '
+            if type != "object" or (.IsTruncated | type) != "boolean"
+                or ((.Contents // []) | type) != "array" then
+                error("Invalid S3 listing response")
+            else
+                (.Contents // []) |
+                map(
+                    if (.Size | type) != "number" or .Size < 0 or .Size != (.Size | floor)
+                        or ((.StorageClass // "STANDARD") | type) != "string" then
+                        error("Invalid S3 object metadata")
+                    else {class: (.StorageClass // "STANDARD"), bytes: .Size}
+                    end
+                ) | group_by(.class) |
+                map({class: .[0].class, bytes: (map(.bytes) | add), objects: length})
+            end'); then
+            echo " ERROR parsing objects for ${prefix} (page ${page})" >&2
+            return 1
+        fi
+        if ! combined=$(jq -cn --argjson a "$combined" --argjson b "$page_totals" '
+            $a + $b | group_by(.class) |
+            map({class: .[0].class, bytes: (map(.bytes) | add),
+                 objects: (map(.objects) | add)}) | sort_by(-.bytes)'); then
+            echo " ERROR aggregating objects for ${prefix} (page ${page})" >&2
+            return 1
+        fi
 
         local is_truncated
-        is_truncated=$(echo "$page_result" | jq -r '.IsTruncated // false')
+        if ! is_truncated=$(printf '%s' "$page_result" | jq -r '.IsTruncated'); then
+            echo " ERROR reading pagination status for ${prefix}" >&2
+            return 1
+        fi
         [[ "$is_truncated" != "true" ]] && break
 
-        next_token=$(echo "$page_result" | jq -r '.NextContinuationToken // empty')
-        [[ -z "$next_token" ]] && break
+        local previous_token="$next_token"
+        if ! next_token=$(printf '%s' "$page_result" | jq -er '
+            .NextContinuationToken | select(type == "string" and length > 0)'); then
+            echo " ERROR: missing continuation token for ${prefix}" >&2
+            return 1
+        fi
+        if [[ "$next_token" == "$previous_token" ]]; then
+            echo " ERROR: repeated continuation token for ${prefix}" >&2
+            return 1
+        fi
     done
 
-    # Group by storage class, sum bytes & count objects
-    local result
-    result=$(jq -n --argjson data "$combined" '
-        if ($data | length) == 0 then []
-        else $data | group_by(.class) |
-            map({
-                class: .[0].class,
-                bytes: (map(.bytes) | add // 0),
-                objects: length
-            }) | sort_by(-.bytes)
-        end')
-
     local total_bytes total_objects
-    total_bytes=$(echo "$result" | jq '[.[].bytes] | add // 0')
-    total_objects=$(echo "$result" | jq '[.[].objects] | add // 0')
+    if ! total_bytes=$(printf '%s' "$combined" | jq '[.[].bytes] | add // 0') ||
+       ! total_objects=$(printf '%s' "$combined" | jq '[.[].objects] | add // 0'); then
+        echo " ERROR calculating totals for ${prefix}" >&2
+        return 1
+    fi
     printf " %s (%s objects)\n" "$(format_bytes "$total_bytes")" "$total_objects" >&2
 
-    echo "$result"
+    echo "$combined"
 }
 
 # Optional: try Cost Explorer for actual billing data
@@ -325,7 +349,10 @@ declare -A SVC_COST_AUD
 
 for svc in "${SERVICE_ORDER[@]}"; do
     prefix="${SERVICE_PREFIXES[$svc]}"
-    breakdown=$(enumerate_prefix "$prefix")
+    if ! breakdown=$(enumerate_prefix "$prefix"); then
+        echo "ERROR: Failed to scan ${svc}; report not saved or sent" >&2
+        exit "$EXIT_ERROR"
+    fi
     SVC_BREAKDOWN_JSON[$svc]="$breakdown"
     SVC_TOTAL_BYTES[$svc]=$(echo "$breakdown" | jq '[.[].bytes] | add // 0')
     SVC_TOTAL_OBJECTS[$svc]=$(echo "$breakdown" | jq '[.[].objects] | add // 0')
@@ -504,6 +531,91 @@ fi
 hr
 echo ""
 
+# ─── Write State File ─────────────────────────────────────────────────────────
+
+if $SAVE_STATE; then
+    state_tmp=""
+    latest_tmp=""
+    trap '[[ -z "$state_tmp" ]] || rm -f -- "$state_tmp"; [[ -z "$latest_tmp" ]] || rm -f -- "$latest_tmp"' EXIT
+
+    ce_json="null"
+    $CE_AVAILABLE && ce_json="$CE_RESULT"
+
+    services_json="{}"
+    for svc in "${SERVICE_ORDER[@]}"; do
+        svc_entry=$(jq -n \
+            --argjson size "${SVC_TOTAL_BYTES[$svc]}" \
+            --argjson objects "${SVC_TOTAL_OBJECTS[$svc]}" \
+            --arg cost_aud "${SVC_COST_AUD[$svc]}" \
+            --argjson breakdown "${SVC_BREAKDOWN_JSON[$svc]}" \
+            '{
+                size_bytes: $size,
+                objects: $objects,
+                estimated_cost_aud: ($cost_aud | tonumber),
+                storage_breakdown: $breakdown
+            }')
+        services_json=$(jq -n \
+            --argjson base "$services_json" \
+            --arg k "$svc" \
+            --argjson v "$svc_entry" \
+            '$base + {($k): $v}')
+    done
+
+    state_tmp=$(mktemp "${STATE_DIR}/.s3-costs-${THIS_MONTH}.XXXXXX")
+    jq -n \
+        --arg report_date "$REPORT_DATE" \
+        --argjson report_epoch "$REPORT_EPOCH" \
+        --arg bucket "$BUCKET" \
+        --arg region "$REGION" \
+        --argjson budget_aud "$BUDGET_AUD" \
+        --arg total_cost_aud "$TOTAL_COST_AUD" \
+        --argjson total_bytes "$TOTAL_BYTES" \
+        --argjson total_objects "$TOTAL_OBJECTS" \
+        --arg budget_status "$BUDGET_STATUS" \
+        --arg usd_to_aud "$USD_TO_AUD" \
+        --arg fx_source "$FX_SOURCE" \
+        --argjson services "$services_json" \
+        --argjson top_cost_drivers "$DRIVERS_JSON" \
+        --argjson cost_explorer_available "$CE_AVAILABLE" \
+        --argjson actual_billing "$ce_json" \
+        --arg prev_month_label "$PREV_MONTH_LABEL" \
+        --arg prev_month_total "${PREV_MONTH_TOTAL:-}" \
+        --arg year_ago_label "$YEAR_AGO_LABEL" \
+        --arg year_ago_total "${YEAR_AGO_TOTAL:-}" \
+        '{
+            report_date: $report_date,
+            report_epoch: $report_epoch,
+            bucket: $bucket,
+            region: $region,
+            budget_aud: $budget_aud,
+            estimated_total_aud: ($total_cost_aud | tonumber),
+            total_size_bytes: $total_bytes,
+            total_objects: $total_objects,
+            budget_status: $budget_status,
+            usd_to_aud: ($usd_to_aud | tonumber),
+            fx_source: $fx_source,
+            trend: {
+                prev_month_label: $prev_month_label,
+                prev_month_total_aud: (if $prev_month_total != "" then ($prev_month_total | tonumber) else null end),
+                year_ago_label: $year_ago_label,
+                year_ago_total_aud: (if $year_ago_total != "" then ($year_ago_total | tonumber) else null end)
+            },
+            services: $services,
+            top_cost_drivers: $top_cost_drivers,
+            cost_explorer_available: $cost_explorer_available,
+            actual_billing: $actual_billing
+        }' > "$state_tmp"
+
+    chmod 644 "$state_tmp"
+    latest_tmp=$(mktemp "${STATE_DIR}/.s3-costs-latest.XXXXXX")
+    ln -sfn "$(basename "$STATE_FILE")" "$latest_tmp"
+    # Rename on the same filesystem so readers never see partially written JSON.
+    mv -f -- "$state_tmp" "$STATE_FILE"
+    mv -Tf -- "$latest_tmp" "$STATE_LATEST"
+
+    echo "State written to: ${STATE_FILE} (symlinked from $(basename "$STATE_LATEST"))"
+fi
+
 # ─── Optional: Discord Summary ────────────────────────────────────────────────
 
 if $SEND_DISCORD; then
@@ -565,90 +677,6 @@ if $SEND_DISCORD; then
     [[ "$CE_AVAILABLE" == "false" ]] && desc+=" _| Enable Cost Explorer for actual billing_"
 
     send_discord "S3 Cost Report" "$desc" "$local_color" "💰"
-fi
-
-# ─── Write State File ─────────────────────────────────────────────────────────
-
-if $SAVE_STATE; then
-    # Emit null for Cost Explorer if unavailable
-    ce_json="null"
-    $CE_AVAILABLE && ce_json="$CE_RESULT"
-
-    # Build per-service JSON object
-    services_json="{}"
-    for svc in "${SERVICE_ORDER[@]}"; do
-        svc_entry=$(jq -n \
-            --argjson size "${SVC_TOTAL_BYTES[$svc]}" \
-            --argjson objects "${SVC_TOTAL_OBJECTS[$svc]}" \
-            --arg cost_aud "${SVC_COST_AUD[$svc]}" \
-            --argjson breakdown "${SVC_BREAKDOWN_JSON[$svc]}" \
-            '{
-                size_bytes: $size,
-                objects: $objects,
-                estimated_cost_aud: ($cost_aud | tonumber),
-                storage_breakdown: $breakdown
-            }')
-        services_json=$(jq -n \
-            --argjson base "$services_json" \
-            --arg k "$svc" \
-            --argjson v "$svc_entry" \
-            '$base + {($k): $v}')
-    done
-
-    # Total objects tracked in aggregation loop
-    total_objects="$TOTAL_OBJECTS"
-
-    jq -n \
-        --arg report_date "$REPORT_DATE" \
-        --argjson report_epoch "$REPORT_EPOCH" \
-        --arg bucket "$BUCKET" \
-        --arg region "$REGION" \
-        --argjson budget_aud "$BUDGET_AUD" \
-        --arg total_cost_aud "$TOTAL_COST_AUD" \
-        --argjson total_bytes "$TOTAL_BYTES" \
-        --argjson total_objects "$total_objects" \
-        --arg budget_status "$BUDGET_STATUS" \
-        --arg usd_to_aud "$USD_TO_AUD" \
-        --arg fx_source "$FX_SOURCE" \
-        --argjson services "$services_json" \
-        --argjson top_cost_drivers "$DRIVERS_JSON" \
-        --argjson cost_explorer_available "$CE_AVAILABLE" \
-        --argjson actual_billing "$ce_json" \
-        --arg prev_month_label "$PREV_MONTH_LABEL" \
-        --arg prev_month_total "${PREV_MONTH_TOTAL:-}" \
-        --arg year_ago_label "$YEAR_AGO_LABEL" \
-        --arg year_ago_total "${YEAR_AGO_TOTAL:-}" \
-        '{
-            report_date: $report_date,
-            report_epoch: $report_epoch,
-            bucket: $bucket,
-            region: $region,
-            budget_aud: $budget_aud,
-            estimated_total_aud: ($total_cost_aud | tonumber),
-            total_size_bytes: $total_bytes,
-            total_objects: $total_objects,
-            budget_status: $budget_status,
-            usd_to_aud: ($usd_to_aud | tonumber),
-            fx_source: $fx_source,
-            trend: {
-                prev_month_label: $prev_month_label,
-                prev_month_total_aud: (if $prev_month_total != "" then ($prev_month_total | tonumber) else null end),
-                year_ago_label: $year_ago_label,
-                year_ago_total_aud: (if $year_ago_total != "" then ($year_ago_total | tonumber) else null end)
-            },
-            services: $services,
-            top_cost_drivers: $top_cost_drivers,
-            cost_explorer_available: $cost_explorer_available,
-            actual_billing: $actual_billing
-        }' > "$STATE_FILE"
-
-    # Update the stable symlink so check-s3-costs.sh always finds the latest
-    if [[ -f "$STATE_FILE" ]]; then
-        echo "Note: Updating existing ${THIS_MONTH} state file (use --no-save-state to skip)"
-    fi
-    ln -sf "$(basename "$STATE_FILE")" "$STATE_LATEST"
-
-    echo "State written to: ${STATE_FILE} (symlinked from $(basename "$STATE_LATEST"))"
 fi
 
 echo "Report complete."

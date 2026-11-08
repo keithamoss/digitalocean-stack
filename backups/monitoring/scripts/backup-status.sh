@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+if [[ "${1:-status}" == "heartbeat" ]]; then
+    trap 'code=$?; if ((code != 0)); then echo "ERROR: Heartbeat aborted unexpectedly (exit ${code})" >&2; exit "${EXIT_ERROR:-2}"; fi' EXIT
+fi
+
 # Determine script and backup directories using realpath (Issue 4)
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")" 
 MONITORING_DIR="$(realpath "$SCRIPT_DIR/..")"
@@ -14,19 +18,25 @@ SECRETS_DIR="${BACKUPS_DIR}/secrets"
 DISCORD_ENV="${SECRETS_DIR}/discord.env"
 
 # Load centralized configuration (Issue 3)
-source "${BACKUPS_DIR}/config.sh"
+if ! source "${BACKUPS_DIR}/config.sh"; then
+    echo "ERROR: Failed to load backup configuration" >&2
+    exit "${EXIT_ERROR:-2}"
+fi
 
 # Check required dependencies (Issue 4)
 for cmd in docker jq bc date curl restic aws systemctl; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "ERROR: Required command '$cmd' is not installed" >&2
-        exit 1
+        exit "$EXIT_ERROR"
     fi
 done
 
 # Load Discord webhook if available
 if [[ -f "$DISCORD_ENV" ]]; then
-    source "$DISCORD_ENV"
+    if ! source "$DISCORD_ENV"; then
+        echo "ERROR: Failed to load Discord configuration" >&2
+        exit "$EXIT_ERROR"
+    fi
 fi
 
 # Validate and load shared libraries (Issue 5)
@@ -34,9 +44,12 @@ for lib in "discord-lib.sh" "check-postgres-backup.sh" "check-foundry-backup.sh"
     lib_path="${SCRIPT_DIR}/${lib}"
     if [[ ! -f "$lib_path" ]]; then
         echo "ERROR: Required library '$lib' not found at $lib_path" >&2
-        exit 1
+        exit "$EXIT_ERROR"
     fi
-    source "$lib_path"
+    if ! source "$lib_path"; then
+        echo "ERROR: Failed to load required library '$lib'" >&2
+        exit "$EXIT_ERROR"
+    fi
 done
 
 # Set configuration for sub-modules (now using values from config.sh)
@@ -1165,6 +1178,8 @@ heartbeat() {
         echo "-------------------------------------------"
     fi
 
+    # Only this deliberate outcome may return a warning; unexpected failures stay errors.
+    trap - EXIT
     return $exit_code
 }
 

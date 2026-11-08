@@ -8,13 +8,18 @@ This directory contains monitoring scripts for the backup system.
 - **backup-status.sh** - Main status monitoring script
   - `./backup-status.sh status` - Display detailed backup status
   - `./backup-status.sh heartbeat` - Send daily health check to Discord
+
+- **check-restore-test.sh** - Restore-test dashboard checker
+   - Parses latest restore orchestration log (`logs/restore/orchestration/restore-test-*.log`)
+   - Exposes result/age/status to `backup-status.sh` (including stale warning threshold)
   
 - **send-failure-alert.sh** - Called by systemd on backup failures
 - **discord-lib.sh** - Shared Discord notification library
 
 ### Systemd Services
-- **postgres-backup-heartbeat.service** - Systemd service for daily heartbeat
-- **postgres-backup-heartbeat.timer** - Timer for daily heartbeat at 3:30 AM
+- **consolidated-backup.service** - Runs the full backup sequence in order
+- **consolidated-backup.timer** - Triggers the backup sequence daily at 3:00 AM
+- **backup-heartbeat.service** - Sends final summary/health message after orchestration
 
 ## Setup
 
@@ -24,12 +29,12 @@ This directory contains monitoring scripts for the backup system.
    # Edit secrets/discord.env and add your Discord webhook URL
    ```
 
-2. **Install systemd timer for daily heartbeat:**
+2. **Install systemd units and timers:**
    ```bash
-   cd systemd
-   sudo ./install.sh
+   cd /home/keith/digitalocean-stack/backups
+   sudo ./install-systemd.sh
    ```
-   This will also update the backup services with failure alerting.
+   This installs and enables consolidated backup orchestration, heartbeat integration, and failure alerting.
 
 3. **Test the status script:**
    ```bash
@@ -53,8 +58,36 @@ This directory contains monitoring scripts for the backup system.
 
 ### Discord Alerts
 - **Failure alerts** (immediate): Sent when backups fail
-- **Daily heartbeat** (3:30 AM): Health status with key metrics
+- **Daily heartbeat** (end of consolidated run): Sent after all phases complete, Discord messages sent only on:
+  - **Weekends** (Saturday/Sunday): Health status with key metrics
+  - **Warnings or Errors** (any day): Issues requiring attention
 - **Warnings**: Stale backups (>36 hours old)
+  - Heartbeat exit code `1` means warnings were reported, not that a backup failed.
+    The heartbeat service accepts this code via `SuccessExitStatus=1`, preventing
+    an additional generic failure alert. Critical errors (code `2`) and runtime
+    failures still trigger `OnFailure`. Unexpected heartbeat exits, including
+    missing dependencies/configuration and fatal shell errors, are normalized
+    to code `2`; only the completed health assessment can return warning code `1`.
+
+### S3 Cost Reports
+- `costs/s3-cost-report.sh` scans explicit pages of up to 1,000 S3 objects,
+  aggregating per-storage-class totals without passing object lists as CLI arguments.
+- Listing/parsing errors, invalid pagination, and the 200-page safety limit abort
+  the report rather than publish partial or zero-cost results.
+- Monthly JSON state is written to a temporary file and atomically renamed.
+  The latest-state symlink is also atomically replaced before a success notification.
+  `--no-save-state` still allows a console/Discord report without updating state.
+- A report older than 32 days produces a heartbeat warning. Fix the report job
+  rather than increasing that threshold.
+- After remediation, run:
+  ```bash
+  sudo systemctl start s3-cost-report.service
+  sudo systemctl start backup-heartbeat.service
+  ```
+- Regression checks (isolated fixtures; no AWS or Discord requests):
+  ```bash
+  bash tests/backup-monitoring-test.sh
+  ```
 
 ### Output Examples
 
@@ -126,8 +159,9 @@ journalctl -u postgres-*-backup.service -n 50
 - Check jq is installed: `which jq`
 
 ### Heartbeat not running
-- Check timer is enabled: `systemctl status postgres-backup-heartbeat.timer`
-- View logs: `journalctl -u postgres-backup-heartbeat.service`
+- Check orchestration timer is enabled: `systemctl status consolidated-backup.timer`
+- Check heartbeat service logs: `journalctl -u backup-heartbeat.service -n 100`
+- Check full run logs: `journalctl -u consolidated-backup.service -n 200`
 
 ## Dependencies
 

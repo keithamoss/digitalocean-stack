@@ -79,6 +79,7 @@ error() {
 # Calculates and logs execution duration
 #
 # Arguments:
+#   --allow-warning: Optional; log EXIT_WARNING as a warning, preserving its code
 #   $1 - Backup type description (e.g., "PostgreSQL Full Backup", "Heartbeat Check")
 #   $@ - Command and arguments to execute
 #
@@ -95,6 +96,11 @@ error() {
 #   - Appends output to LOG_FILE
 #   - Logs success/failure message with duration
 run_with_logging() {
+    local allow_warning=false
+    if [[ "${1:-}" == "--allow-warning" ]]; then
+        allow_warning=true
+        shift
+    fi
     local backup_type="$1"
     shift
     local cmd=("$@")
@@ -123,7 +129,11 @@ run_with_logging() {
         local duration=$((end_time - START_TIME))
         
         log ""
-        log "✗ ${backup_type} failed with exit code ${exit_code}"
+        if $allow_warning && ((exit_code == EXIT_WARNING)); then
+            log "⚠ ${backup_type} completed with warnings (exit code ${exit_code})"
+        else
+            log "✗ ${backup_type} failed with exit code ${exit_code}"
+        fi
         log "Duration: $(format_duration $duration)"
     fi
     

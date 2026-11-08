@@ -15,6 +15,9 @@ WorkingDirectory=@STACK_DIR@/backups/monitoring/heartbeat
 # Run heartbeat check for all backup systems (PostgreSQL + Foundry)
 ExecStart=@STACK_DIR@/backups/monitoring/heartbeat/heartbeat-wrapper.sh
 
+# Warnings already send an actionable heartbeat; reserve OnFailure for errors.
+SuccessExitStatus=1
+
 # Environment
 Environment="HOME=/root"
 

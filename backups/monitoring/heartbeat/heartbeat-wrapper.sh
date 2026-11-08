@@ -29,8 +29,8 @@ log "Log file: $LOG_FILE"
 log ""
 
 # Execute heartbeat check with logging (Issue 10)
-if run_with_logging "Backup Heartbeat Check" "$HEARTBEAT_SCRIPT" heartbeat; then
+if run_with_logging --allow-warning "Backup Heartbeat Check" "$HEARTBEAT_SCRIPT" heartbeat; then
     exit $EXIT_SUCCESS
 else
-    exit $EXIT_ERROR
+    exit $?
 fi
