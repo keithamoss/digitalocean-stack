@@ -60,11 +60,10 @@ echo "  ✓ auto-redeploy.timer enabled"
 echo "Installing logrotate configs..."
 "${STACK_DIR}/infra/logrotate.d/deploy-logrotate.sh"
 
-# Create log directory and normalize the root-owned contract.
-# This service is intentionally root-only under the backup-domain migration.
+# Keep logs stack-user-owned for Heartbeat and logrotate, even though the service runs as root.
 echo "Setting up log directory..."
 mkdir -p "${STACK_DIR}/logs/auto-redeploy"
-chown root:root "${STACK_DIR}/logs/auto-redeploy"
+chown "${STACK_USER}:${STACK_USER}" "${STACK_DIR}/logs/auto-redeploy"
 chmod 755 "${STACK_DIR}/logs/auto-redeploy"
 echo "  ✓ Log directory ready: ${STACK_DIR}/logs/auto-redeploy"
 
